@@ -42,9 +42,10 @@ export function AuthProvider({ children }) {
   }
 
   const canEdit = user && user.role !== 'observer'
+  const isAdmin = !!(user && (user.is_superuser || user.role === 'admin'))
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout, canEdit }}>
+    <AuthContext.Provider value={{ user, loading, login, logout, canEdit, isAdmin }}>
       {children}
     </AuthContext.Provider>
   )

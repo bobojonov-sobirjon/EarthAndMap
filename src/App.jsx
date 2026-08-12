@@ -2,6 +2,23 @@ import { useEffect, useState } from 'react'
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import IntroSplash, { shouldShowIntro } from './components/IntroSplash'
 import Layout from './components/Layout'
+import AdminLayout from './admin/AdminLayout'
+import AdminHome from './admin/AdminHome'
+import AdminImportPage from './admin/AdminImportPage'
+import {
+  AdminBoundariesPage,
+  AdminCategoriesPage,
+  AdminChangesPage,
+  AdminIssuesPage,
+  AdminLandsPage,
+  AdminMahallasPage,
+  AdminNoticesPage,
+  AdminRecordsPage,
+  AdminUrbanizationPage,
+  AdminUsersPage,
+  AdminVersionsPage,
+  AdminYearsPage,
+} from './admin/AdminPages'
 import ComparePage from './pages/ComparePage'
 import Dashboard from './pages/Dashboard'
 import HomePage from './pages/HomePage'
@@ -34,6 +51,22 @@ function App() {
         <div className={introOpen ? 'app-behind-intro' : 'app-enter'}>
           <Routes>
             <Route path="/login" element={<LoginPage />} />
+            <Route path="/admin-panel" element={<AdminLayout />}>
+              <Route index element={<AdminHome />} />
+              <Route path="import" element={<AdminImportPage />} />
+              <Route path="users" element={<AdminUsersPage />} />
+              <Route path="categories" element={<AdminCategoriesPage />} />
+              <Route path="lands" element={<AdminLandsPage />} />
+              <Route path="boundaries" element={<AdminBoundariesPage />} />
+              <Route path="mahallas" element={<AdminMahallasPage />} />
+              <Route path="years" element={<AdminYearsPage />} />
+              <Route path="versions" element={<AdminVersionsPage />} />
+              <Route path="records" element={<AdminRecordsPage />} />
+              <Route path="urbanization" element={<AdminUrbanizationPage />} />
+              <Route path="issues" element={<AdminIssuesPage />} />
+              <Route path="changes" element={<AdminChangesPage />} />
+              <Route path="notices" element={<AdminNoticesPage />} />
+            </Route>
             <Route path="/" element={<Layout />}>
               <Route index element={<HomePage />} />
               <Route path="map" element={<MapPage />} />

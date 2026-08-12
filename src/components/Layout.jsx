@@ -20,7 +20,7 @@ const ROLE_LABEL = {
 }
 
 export default function Layout() {
-  const { user, logout } = useAuth()
+  const { user, logout, isAdmin } = useAuth()
   const navigate = useNavigate()
 
   return (
@@ -44,6 +44,14 @@ export default function Layout() {
               <span>{item.icon}</span> {item.label}
             </NavLink>
           ))}
+          {isAdmin && (
+            <NavLink
+              to="/admin-panel"
+              className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
+            >
+              <span>⚙️</span> Admin panel
+            </NavLink>
+          )}
         </nav>
         <div className="sidebar-footer">
           {user ? (

@@ -41,7 +41,40 @@ export const monitoringApi = {
   issues: (params) => client.get('/monitoring/issues/', { params }),
   createIssue: (data) => client.post('/monitoring/issues/', data),
   updateIssue: (id, data) => client.patch(`/monitoring/issues/${id}/`, data),
+  deleteIssue: (id) => client.delete(`/monitoring/issues/${id}/`),
   changes: (params) => client.get('/monitoring/changes/', { params }),
   years: (params) => client.get('/monitoring-years/', { params }),
   records: (params) => client.get('/monitoring-records/', { params }),
 }
+
+/** Админ-панель CRUD API */
+function crud(base) {
+  return {
+    list: (params) => client.get(`${base}/`, { params }),
+    get: (id) => client.get(`${base}/${id}/`),
+    create: (data) => client.post(`${base}/`, data),
+    update: (id, data) => client.put(`${base}/${id}/`, data),
+    patch: (id, data) => client.patch(`${base}/${id}/`, data),
+    remove: (id) => client.delete(`${base}/${id}/`),
+  }
+}
+
+export const adminApi = {
+  users: crud('/auth/users'),
+  categories: crud('/categories'),
+  lands: crud('/lands'),
+  boundaries: crud('/boundaries'),
+  mahallas: crud('/mahallas'),
+  notices: crud('/notices'),
+  years: crud('/monitoring-years'),
+  versions: crud('/object-versions'),
+  records: crud('/monitoring-records'),
+  urbanization: crud('/urbanization-layers'),
+  issues: crud('/monitoring/issues'),
+  changes: {
+    list: (params) => client.get('/monitoring/changes/', { params }),
+    get: (id) => client.get(`/monitoring/changes/${id}/`),
+  },
+  attachments: crud('/attachments'),
+}
+

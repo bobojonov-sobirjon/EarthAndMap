@@ -1,10 +1,12 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 
 export default function LoginPage() {
   const { login } = useAuth()
   const navigate = useNavigate()
+  const [params] = useSearchParams()
+  const next = params.get('next') || '/map'
   const [username, setUsername] = useState('admin')
   const [password, setPassword] = useState('admin123')
   const [error, setError] = useState('')
@@ -16,9 +18,9 @@ export default function LoginPage() {
     setError('')
     try {
       await login(username, password)
-      navigate('/map')
+      navigate(next)
     } catch {
-      setError('Login yoki parol noto\'g\'ri')
+      setError('Неверный логин или пароль')
     } finally {
       setLoading(false)
     }
@@ -29,16 +31,16 @@ export default function LoginPage() {
       <form className="login-card" onSubmit={handleSubmit}>
         <div className="login-brand">
           <span>🌍</span>
-          <h1>Buxoro GIS</h1>
-          <p>Umumfoydalanishdagi yerlar tizimi</p>
+          <h1>Бухара GIS</h1>
+          <p>{next.startsWith('/admin-panel') ? 'Вход в админ-панель' : 'Система земель общего пользования'}</p>
         </div>
         {error && <div className="error-msg">{error}</div>}
-        <label>Login<input value={username} onChange={(e) => setUsername(e.target.value)} /></label>
-        <label>Parol<input type="password" value={password} onChange={(e) => setPassword(e.target.value)} /></label>
+        <label>Логин<input value={username} onChange={(e) => setUsername(e.target.value)} /></label>
+        <label>Пароль<input type="password" value={password} onChange={(e) => setPassword(e.target.value)} /></label>
         <button type="submit" className="btn btn-primary btn-block" disabled={loading}>
-          {loading ? 'Kirish...' : 'Kirish'}
+          {loading ? 'Вход...' : 'Войти'}
         </button>
-        <p className="login-hint">Demo: admin / admin123</p>
+        <p className="login-hint">Супер-админ: admin / admin123</p>
       </form>
     </div>
   )
