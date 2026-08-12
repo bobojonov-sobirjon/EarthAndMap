@@ -10,7 +10,6 @@ const NAV = [
   { to: '/urbanization', label: 'Urbanizatsiya', icon: '🏙️' },
   { to: '/compare', label: 'Taqqoslash', icon: '⚖️' },
   { to: '/problems', label: 'Muammoli hududlar', icon: '⚠️' },
-  { to: '/reports', label: 'Hisobotlar', icon: '📄' },
 ]
 
 const ROLE_LABEL = {
@@ -45,14 +44,6 @@ export default function Layout() {
               <span>{item.icon}</span> {item.label}
             </NavLink>
           ))}
-          <a
-            className="nav-link"
-            href="http://127.0.0.1:8009/admin/"
-            target="_blank"
-            rel="noreferrer"
-          >
-            <span>⚙️</span> Ma'muriy panel
-          </a>
         </nav>
         <div className="sidebar-footer">
           {user ? (

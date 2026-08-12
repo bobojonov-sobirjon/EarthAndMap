@@ -1,4 +1,10 @@
-export default function LayerPanel({ categories, boundaries = [], visibleLayers, onToggle, stats }) {
+import { buildLayerGroups } from '../constants/researchLayers'
+
+export default function LayerPanel({ categories, boundaries = [], visibleLayers, onToggle, onToggleGroup, stats }) {
+  const groups = buildLayerGroups(categories)
+
+  const groupChecked = (g) => g.codes.every((code) => visibleLayers[code] !== false)
+
   return (
     <div className="panel layer-panel">
       <h3>Chegaralar</h3>
@@ -16,25 +22,39 @@ export default function LayerPanel({ categories, boundaries = [], visibleLayers,
         ))}
       </div>
 
-      <h3 style={{ marginTop: '1rem' }}>Qatlamlar</h3>
+      <h3 style={{ marginTop: '1rem' }}>Umumiy foydalanishdagi yer obyektlari</h3>
       <div className="layer-list">
-        {categories.map((cat) => (
-          <label key={cat.code} className="layer-item">
+        {groups.map((g) => (
+          <label key={g.key} className="layer-item">
             <input
               type="checkbox"
-              checked={visibleLayers[cat.code] !== false}
-              onChange={() => onToggle(cat.code)}
+              checked={groupChecked(g)}
+              onChange={() => {
+                if (onToggleGroup) onToggleGroup(g.codes)
+                else g.codes.forEach((c) => onToggle(c))
+              }}
             />
-            <span className="layer-color" style={{ background: cat.color }} />
-            <span className="layer-name">{cat.name_uz}</span>
-            <span className="layer-count">{cat.land_count ?? 0}</span>
+            <span className="layer-color" style={{ background: g.color }} />
+            <span className="layer-name">{g.name}</span>
+            <span className="layer-count">{g.land_count}</span>
           </label>
         ))}
       </div>
+
+      <h3 style={{ marginTop: '1rem' }}>Legenda</h3>
+      <div className="layer-legend">
+        {groups.map((g) => (
+          <div key={`leg-${g.key}`} className="legend-row">
+            <span className="layer-color" style={{ background: g.color }} />
+            <span>{g.name}</span>
+          </div>
+        ))}
+      </div>
+
       {stats && (
         <div className="layer-stats">
           <div><strong>{stats.total_objects}</strong> obyekt</div>
-          <div><strong>{Math.round(stats.total_area_sqm).toLocaleString()}</strong> m² maydon</div>
+          <div><strong>{Math.round(stats.total_area_sqm || 0).toLocaleString()}</strong> m² maydon</div>
         </div>
       )}
     </div>

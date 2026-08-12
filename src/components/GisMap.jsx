@@ -27,6 +27,8 @@ export default function GisMap({
   error = null,
   refreshing = false,
   onRefresh,
+  showEditTools = false,
+  onCoordsChange,
 }) {
   const mapRef = useRef(null)
   const mapInstance = useRef(null)
@@ -44,7 +46,7 @@ export default function GisMap({
 
     const map = L.map(mapRef.current, {
       zoomControl: false,
-      attributionControl: true,
+      attributionControl: false,
     }).setView(
       [center?.lat ?? DEFAULT_CENTER.lat, center?.lng ?? DEFAULT_CENTER.lng],
       center?.zoom ?? DEFAULT_CENTER.zoom,
@@ -52,14 +54,14 @@ export default function GisMap({
 
     L.tileLayer(
       'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-      { attribution: 'Esri World Imagery', maxZoom: 19 },
+      { attribution: '', maxZoom: 19 },
     ).addTo(map)
 
     // Joy nomlari — yuqori pane, aniq kontrast
     L.tileLayer(
       'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}',
       {
-        attribution: 'Esri Labels',
+        attribution: '',
         maxZoom: 19,
         opacity: 1,
         className: 'map-labels-sharp',
@@ -70,7 +72,7 @@ export default function GisMap({
     L.tileLayer(
       'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}',
       {
-        attribution: 'Esri Roads',
+        attribution: '',
         maxZoom: 19,
         opacity: 0.8,
         zIndex: 440,
@@ -78,16 +80,7 @@ export default function GisMap({
     ).addTo(map)
 
     map.pm.setLang('en')
-    map.pm.addControls({
-      position: 'topleft',
-      drawMarker: true,
-      drawPolygon: true,
-      drawPolyline: true,
-      editMode: true,
-      dragMode: false,
-      removalMode: true,
-    })
-
+    // Chizish / tahrirlash / kesish asboblari odatiy holatda YO'Q (hujjat: olib tashlash)
     map.on('pm:create', (e) => {
       const layer = e.layer
       const geo = layer.toGeoJSON().geometry
@@ -146,16 +139,16 @@ export default function GisMap({
     }
   }, [geojson, visibleLayers, selectedId, ready, onSelect])
 
-  // —— Draw mode ——
+  // —— Draw mode (faqat tahrirlash ruxsati bilan) ——
   useEffect(() => {
     const map = mapInstance.current
     if (!map || !ready) return
     map.pm.disableDraw()
-    if (drawMode) {
+    if (showEditTools && drawMode) {
       const shape = drawType === 'LineString' ? 'Line' : drawType === 'Point' ? 'Marker' : 'Polygon'
       map.pm.enableDraw(shape)
     }
-  }, [drawMode, drawType, ready])
+  }, [drawMode, drawType, ready, showEditTools])
 
   return (
     <div className="gis-map-wrap">
@@ -164,6 +157,7 @@ export default function GisMap({
         map={ready ? mapInstance.current : null}
         onRefresh={onRefresh}
         refreshing={refreshing}
+        onCoordsChange={onCoordsChange}
       />
 
       {loading && (

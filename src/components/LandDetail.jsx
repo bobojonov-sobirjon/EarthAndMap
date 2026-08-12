@@ -1,67 +1,111 @@
+import { displayCategoryName } from '../constants/researchLayers'
+
 const STATUS_LABELS = {
-  active: 'Yaxshi',
-  construction: 'Qurilish jarayonida',
-  damaged: 'Zararlangan',
+  active: 'Amalda',
+  construction: 'Yangilanmoqda',
+  damaged: 'Muammoli',
   closed: 'Yopiq',
   planned: 'Rejalashtirilgan',
 }
 
-export default function LandDetail({ land, history, versions = [], onClose, onEdit, canEdit }) {
+const ROAD_CLASS = {
+  magistral: 'I',
+  shahar: 'II',
+  mahalliy: 'III',
+  piyoda: 'Piyoda',
+}
+
+const CATEGORY_TITLES = {
+  yollar: "Avtomobil yo'li",
+  suv: "Sug'orish tarmog'i",
+  istirohat: "Istirohat bog'i",
+  park: "Istirohat bog'i",
+  qabriston: 'Qabriston',
+}
+
+function attrsForLand(land) {
+  const code = land.category_code
+  const rows = [{ label: 'Nomi', value: land.name }]
+
+  if (code === 'yollar') {
+    rows.push(
+      { label: 'Kategoriyasi', value: ROAD_CLASS[land.road_class] || land.road_class || '—' },
+      { label: 'Uzunligi', value: land.length_km != null ? `${land.length_km} km` : '—' },
+      { label: 'Qoplama turi', value: land.surface_type || land.data_source || '—' },
+      { label: 'Holati', value: STATUS_LABELS[land.status] || land.status },
+    )
+  } else if (code === 'suv') {
+    rows.push(
+      { label: 'Turi', value: land.water_type || 'Kanal / ariq' },
+      { label: 'Uzunligi', value: land.length_km != null ? `${land.length_km} km` : '—' },
+      { label: 'Holati', value: STATUS_LABELS[land.status] || land.status },
+    )
+  } else if (code === 'istirohat' || code === 'park') {
+    rows.push(
+      { label: 'Maydoni', value: land.area_ha != null ? `${land.area_ha} ga` : '—' },
+      { label: 'Foydalanish turi', value: land.usage_type || 'Rekreatsiya' },
+      { label: 'Ekologik holati', value: STATUS_LABELS[land.status] || land.status },
+    )
+  } else if (code === 'qabriston') {
+    rows.push(
+      { label: 'MFY', value: land.mahalla || '—' },
+      { label: 'Maydoni', value: land.area_ha != null ? `${land.area_ha} ga` : '—' },
+      { label: 'Kadastr raqami', value: land.cadastral_number || '—' },
+      { label: 'Holati', value: STATUS_LABELS[land.status] || land.status },
+    )
+  } else {
+    rows.push(
+      { label: 'Kategoriya', value: displayCategoryName(land) || land.category_name },
+      { label: 'Holati', value: STATUS_LABELS[land.status] || land.status },
+      land.area_ha != null && { label: 'Maydoni', value: `${land.area_ha} ga` },
+      land.length_km != null && { label: 'Uzunligi', value: `${land.length_km} km` },
+      land.mahalla && { label: 'MFY', value: land.mahalla },
+    )
+  }
+
+  if (land.updated_at || land.last_updated) {
+    rows.push({
+      label: 'Oxirgi yangilangan sana',
+      value: new Date(land.updated_at || land.last_updated).toLocaleDateString('uz'),
+    })
+  }
+
+  return rows.filter(Boolean)
+}
+
+export default function LandDetail({ land, onClose, onEdit, onDetail, canEdit, floating = false }) {
   if (!land) return null
+  const rows = attrsForLand(land)
+  const title = CATEGORY_TITLES[land.category_code] || displayCategoryName(land.category_code) || 'Obyekt'
 
   return (
-    <div className="panel land-detail">
-      <div className="panel-header">
-        <h3>{land.public_id ? `${land.public_id}` : land.name}</h3>
-        <button type="button" className="btn-close" onClick={onClose}>×</button>
+    <div className={`land-detail-popup ${floating ? 'land-detail-popup--floating' : ''}`}>
+      <div className="land-detail-popup__header">
+        <h3>{title}</h3>
+        <button type="button" className="btn-close" onClick={onClose} aria-label="Yopish">×</button>
       </div>
-      <p className="detail-title">{land.name}</p>
-      <div className="detail-grid">
-        <div><span>Kategoriya</span><strong>{land.category_name}</strong></div>
-        <div><span>Status</span><strong>{STATUS_LABELS[land.status] || land.status}</strong></div>
-        {land.area_ha != null && <div><span>Maydon</span><strong>{land.area_ha} ga</strong></div>}
-        {land.area_sqm && !land.area_ha && <div><span>Maydon</span><strong>{Number(land.area_sqm).toLocaleString()} m²</strong></div>}
-        {land.length_km != null && <div><span>Uzunlik</span><strong>{land.length_km} km</strong></div>}
-        {land.mahalla && <div><span>Mahalla</span><strong>{land.mahalla}</strong></div>}
-        {land.address && <div className="full"><span>Manzil</span><strong>{land.address}</strong></div>}
-        {land.monitoring_year && <div><span>Monitoring yili</span><strong>{land.monitoring_year}</strong></div>}
-        {land.data_source && <div><span>Manba</span><strong>{land.data_source}</strong></div>}
-        {land.responsible_org && <div className="full"><span>Mas'ul</span><strong>{land.responsible_org}</strong></div>}
-        {land.description && <div className="full"><span>Tavsif</span><p>{land.description}</p></div>}
+      <div className="land-detail-popup__body">
+        {rows.map((r) => (
+          <div key={r.label} className="land-detail-row">
+            <span className="land-detail-row__label">{r.label}</span>
+            <span className="land-detail-row__value">{r.value}</span>
+          </div>
+        ))}
       </div>
-
-      {versions?.length > 0 && (
-        <div className="history-section">
-          <h4>Yillar bo‘yicha o‘zgarish</h4>
-          <table className="mini-table">
-            <thead><tr><th>Yil</th><th>ga</th></tr></thead>
-            <tbody>
-              {versions.map((v) => (
-                <tr key={v.id}><td>{v.year}</td><td>{v.area_ha}</td></tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {canEdit && (
-        <button type="button" className="btn btn-primary btn-block" onClick={() => onEdit(land)}>
-          Tahrirlash
+      <div className="land-detail-popup__footer">
+        <button
+          type="button"
+          className="btn btn-primary btn-block land-detail-popup__cta"
+          onClick={() => onDetail?.(land)}
+        >
+          Batafsil ma&apos;lumot
         </button>
-      )}
-      {history?.length > 0 && (
-        <div className="history-section">
-          <h4>O'zgarishlar tarixi</h4>
-          <ul>
-            {history.map((h) => (
-              <li key={h.id}>
-                <span>{new Date(h.changed_at).toLocaleString('uz')}</span>
-                <span>{h.change_type} — {h.description || h.field_name}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
+        {canEdit && (
+          <button type="button" className="btn btn-ghost btn-block" onClick={() => onEdit(land)}>
+            Tahrirlash
+          </button>
+        )}
+      </div>
     </div>
   )
 }

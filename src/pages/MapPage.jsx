@@ -1,31 +1,31 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import FilterPanel from '../components/FilterPanel'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import GisMap from '../components/GisMap'
 import LandDetail from '../components/LandDetail'
 import LandForm from '../components/LandForm'
-import LayerPanel from '../components/LayerPanel'
+import MapControlPanel from '../components/MapControlPanel'
 import { useAuth } from '../context/AuthContext'
-import { landsApi, statsApi } from '../api/services'
+import { landsApi } from '../api/services'
 import { requestMapRefresh, useMapData } from '../hooks/useMapData'
+import { filterResearchCategories, isResearchCategory } from '../constants/researchLayers'
 
 export default function MapPage() {
   const { canEdit } = useAuth()
-  const [stats, setStats] = useState(null)
+  const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const [filters, setFilters] = useState({
-    search: '', category: '', status: '', area_min: '', area_max: '',
+    search: '', category: '', status: '', mahalla: '',
   })
   const [queryParams, setQueryParams] = useState({})
   const [visibleLayers, setVisibleLayers] = useState({})
   const [layersInitialized, setLayersInitialized] = useState(false)
   const [selected, setSelected] = useState(null)
-  const [history, setHistory] = useState([])
   const [showForm, setShowForm] = useState(false)
   const [editLand, setEditLand] = useState(null)
   const [drawMode, setDrawMode] = useState(false)
   const [drawGeometry, setDrawGeometry] = useState(null)
   const [drawType, setDrawType] = useState('Polygon')
-  const [monitorYear, setMonitorYear] = useState(2026)
-  const [versions, setVersions] = useState([])
+  const [mapCoords, setMapCoords] = useState('39.7689° N, 64.4283° E | UTM 40N')
 
   const {
     boundaries,
@@ -34,22 +34,32 @@ export default function MapPage() {
     loading,
     refreshing,
     error,
-    lastUpdated,
     refresh,
   } = useMapData({
-    params: { ...queryParams, ...(monitorYear ? { year: monitorYear } : {}) },
+    params: { ...queryParams },
     pollIntervalMs: 30000,
     enabled: true,
   })
 
-  const categories = config?.categories || []
+  const categories = useMemo(
+    () => filterResearchCategories(config?.categories || []),
+    [config],
+  )
 
-  // Default visibility — faqat birinchi muvaffaqiyatli yuklashda
+  const mahallas = useMemo(() => {
+    const set = new Set()
+    ;(features?.features || []).forEach((f) => {
+      const m = f.properties?.mahalla
+      if (m) set.add(m)
+    })
+    return [...set].sort()
+  }, [features])
+
   useEffect(() => {
     if (!config || layersInitialized) return
     const vis = {}
     ;(config.categories || []).forEach((c) => {
-      vis[c.code] = c.code !== 'yollar'
+      vis[c.code] = isResearchCategory(c.code)
     })
     ;(boundaries?.features || []).forEach((f) => {
       const code = f.properties?.code
@@ -59,7 +69,6 @@ export default function MapPage() {
     setLayersInitialized(true)
   }, [config, boundaries, layersInitialized])
 
-  // Yangi boundary code'lar paydo bo'lsa — default yoqish
   useEffect(() => {
     if (!boundaries?.features?.length || !layersInitialized) return
     setVisibleLayers((prev) => {
@@ -76,28 +85,35 @@ export default function MapPage() {
     })
   }, [boundaries, layersInitialized])
 
+  const handleSelect = useCallback(async (props) => {
+    setSelected(props)
+    setShowForm(false)
+  }, [])
+
   useEffect(() => {
-    statsApi.get().then(({ data }) => setStats(data.totals)).catch(() => {})
-  }, [features])
+    const landId = searchParams.get('land')
+    if (!landId || !features?.features?.length) return
+    const found = features.features.find((f) => String(f.properties?.id) === String(landId))
+    if (found) handleSelect(found.properties)
+  }, [searchParams, features, handleSelect])
 
   const filteredGeojson = useMemo(() => {
     if (!features) return null
-    let list = features.features || []
+    let list = (features.features || []).filter((f) => isResearchCategory(f.properties?.category_code))
     if (filters.search) {
       const q = filters.search.toLowerCase()
       list = list.filter((f) =>
         f.properties?.name?.toLowerCase().includes(q)
-        || f.properties?.address?.toLowerCase().includes(q),
+        || f.properties?.address?.toLowerCase().includes(q)
+        || f.properties?.mahalla?.toLowerCase().includes(q)
+        || f.properties?.public_id?.toLowerCase().includes(q),
       )
     }
-    if (filters.area_min) {
-      list = list.filter((f) => (f.properties?.area_sqm || 0) >= Number(filters.area_min))
-    }
-    if (filters.area_max) {
-      list = list.filter((f) => (f.properties?.area_sqm || 0) <= Number(filters.area_max))
+    if (filters.mahalla) {
+      list = list.filter((f) => (f.properties?.mahalla || '') === filters.mahalla)
     }
     return { ...features, features: list }
-  }, [features, filters.search, filters.area_min, filters.area_max])
+  }, [features, filters.search, filters.mahalla])
 
   const handleSearch = () => {
     const params = {}
@@ -106,24 +122,24 @@ export default function MapPage() {
     setQueryParams(params)
   }
 
-  const handleSelect = useCallback(async (props) => {
-    setSelected(props)
-    setShowForm(false)
-    try {
-      const [hist, vers] = await Promise.all([
-        landsApi.history(props.id),
-        landsApi.versions(props.id),
-      ])
-      setHistory(hist.data)
-      setVersions(vers.data)
-    } catch {
-      setHistory([])
-      setVersions([])
-    }
-  }, [])
+  useEffect(() => {
+    const params = {}
+    if (filters.category) params.category = filters.category
+    if (filters.status) params.status = filters.status
+    setQueryParams(params)
+  }, [filters.category, filters.status])
 
   const handleToggleLayer = (code) => {
     setVisibleLayers((prev) => ({ ...prev, [code]: !prev[code] }))
+  }
+
+  const handleToggleGroup = (codes) => {
+    setVisibleLayers((prev) => {
+      const currentlyOn = codes.every((c) => prev[c] !== false)
+      const next = { ...prev }
+      codes.forEach((c) => { next[c] = !currentlyOn })
+      return next
+    })
   }
 
   const handleDrawComplete = (geom) => {
@@ -142,90 +158,70 @@ export default function MapPage() {
       setEditLand(null)
       setDrawGeometry(null)
       requestMapRefresh()
-      const { data: s } = await statsApi.get()
-      setStats(s.totals)
     } catch (err) {
       alert(err.response?.data?.detail || 'Xatolik yuz berdi')
     }
   }
 
-  const startCreate = (type = 'Polygon') => {
-    setEditLand(null)
-    setDrawGeometry(null)
-    setDrawType(type)
-    setDrawMode(true)
-    setShowForm(true)
-    setSelected(null)
-  }
+  const handleCoordsChange = useCallback((text) => {
+    setMapCoords(text)
+  }, [])
 
   return (
-    <div className="map-page">
-      <div className="map-toolbar">
-        <div>
-          <h2>Interaktiv xarita — Buxoro shahri</h2>
-          {lastUpdated && (
-            <small className="map-updated-hint">
-              Yangilangan: {lastUpdated.toLocaleTimeString('uz')}
-              {refreshing ? ' · yangilanmoqda...' : ''}
-            </small>
-          )}
+    <div className="map-page map-page--immersive">
+      <div className="map-stage">
+        <div className="map-print-header" aria-hidden="true">
+          <strong>Interaktiv xarita — Buxoro shahri</strong>
+          <span>Buxoro GIS · {new Date().toLocaleDateString('uz')}</span>
         </div>
-        {canEdit && (
-          <div className="toolbar-actions">
-            <button type="button" className="btn btn-primary" onClick={() => startCreate('Polygon')}>+ Poligon</button>
-            <button type="button" className="btn btn-secondary" onClick={() => startCreate('LineString')}>+ Yo'l</button>
-            <button type="button" className="btn btn-secondary" onClick={() => startCreate('Point')}>+ Nuqta</button>
-          </div>
+
+        <GisMap
+          center={config?.center}
+          geojson={filteredGeojson}
+          boundary={boundaries}
+          visibleLayers={visibleLayers}
+          selectedId={selected?.id}
+          onSelect={handleSelect}
+          drawMode={drawMode}
+          drawType={drawType}
+          onDrawComplete={handleDrawComplete}
+          loading={loading && !features}
+          error={error}
+          refreshing={refreshing}
+          onRefresh={refresh}
+          showEditTools={canEdit}
+          onCoordsChange={handleCoordsChange}
+        />
+
+        <MapControlPanel
+          boundaries={(boundaries?.features || []).map((f) => f.properties)}
+          categories={config?.categories || []}
+          visibleLayers={visibleLayers}
+          onToggle={handleToggleLayer}
+          onToggleGroup={handleToggleGroup}
+          filters={filters}
+          onChange={setFilters}
+          onSearch={handleSearch}
+          mahallas={mahallas}
+        />
+
+        {selected && !showForm && (
+          <LandDetail
+            land={selected}
+            onClose={() => setSelected(null)}
+            canEdit={canEdit}
+            floating
+            onEdit={async (land) => {
+              const { data } = await landsApi.get(land.id)
+              setEditLand(data)
+              setShowForm(true)
+            }}
+            onDetail={(land) => navigate(`/lands?land=${land.id}`)}
+          />
         )}
-      </div>
-      <div className="map-layout">
-        <div className="map-sidebars left">
-          <LayerPanel
-            categories={categories}
-            boundaries={(boundaries?.features || []).map((f) => f.properties)}
-            visibleLayers={visibleLayers}
-            onToggle={handleToggleLayer}
-            stats={stats}
-          />
-          <FilterPanel
-            filters={filters}
-            categories={categories}
-            onChange={setFilters}
-            onSearch={handleSearch}
-          />
-        </div>
-        <div className="map-container">
-          <GisMap
-            center={config?.center}
-            geojson={filteredGeojson}
-            boundary={boundaries}
-            visibleLayers={visibleLayers}
-            selectedId={selected?.id}
-            onSelect={handleSelect}
-            drawMode={drawMode}
-            drawType={drawType}
-            onDrawComplete={handleDrawComplete}
-            loading={loading && !features}
-            error={error}
-            refreshing={refreshing}
-            onRefresh={refresh}
-          />
-          <div className="map-year-slider">
-            <span>Monitoring yili:</span>
-            {[2018, 2020, 2022, 2024, 2026].map((y) => (
-              <button
-                key={y}
-                type="button"
-                className={`chip ${monitorYear === y ? 'active' : ''}`}
-                onClick={() => setMonitorYear(y)}
-              >
-                {y}
-              </button>
-            ))}
-          </div>
-        </div>
-        <div className="map-sidebars right">
-          {showForm && canEdit && (
+
+        {showForm && canEdit && (
+          <div className="map-form-overlay">
             <LandForm
               categories={categories}
               initial={editLand}
@@ -233,22 +229,21 @@ export default function MapPage() {
               onSubmit={handleSave}
               onCancel={() => { setShowForm(false); setDrawMode(false) }}
             />
-          )}
-          {selected && !showForm && (
-            <LandDetail
-              land={selected}
-              history={history}
-              versions={versions}
-              onClose={() => setSelected(null)}
-              canEdit={canEdit}
-              onEdit={async (land) => {
-                const { data } = await landsApi.get(land.id)
-                setEditLand(data)
-                setShowForm(true)
-              }}
-            />
-          )}
-        </div>
+          </div>
+        )}
+
+        <footer className="map-bottom-bar">
+          <div className="map-bottom-bar__left">
+            <span>© {new Date().getFullYear()} Buxoro GIS platformasi</span>
+            <span className="map-bottom-bar__sep">·</span>
+            <span>Ma&apos;lumot manbalari: Esri, Davlat kadastri, OSM, Sentinel-2</span>
+          </div>
+          <div className="map-bottom-bar__right">
+            <span className="map-scale-hint">0 — 3 km</span>
+            <span className="map-bottom-bar__sep">|</span>
+            <span>{mapCoords}</span>
+          </div>
+        </footer>
       </div>
     </div>
   )

@@ -1,139 +1,319 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
-  Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Legend,
-  Line, LineChart, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis,
+  Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, LabelList,
+  ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts'
 import { statsApi } from '../api/services'
+import MiniMapPreview from '../components/MiniMapPreview'
+import {
+  IcoArea, IcoArrow, IcoCalendar, IcoCemetery, IcoChart, IcoCheck, IcoCity,
+  IcoClock, IcoCloud, IcoDatabase, IcoLayers, IcoMahalla, IcoMap,
+  IcoMonitor, IcoPark, IcoPercent, IcoReport, IcoRoad, IcoUrban, IcoWater,
+} from '../components/HomeIcons'
+import {
+  filterResearchCategoryStats,
+  LAYER_GROUPS,
+  ROAD_CLASS_LABELS,
+} from '../constants/researchLayers'
 
 const QUICK = [
-  { to: '/map', label: 'Interaktiv xarita', desc: 'Qatlamlar va obyekt kartochkasi', color: '#2d8cf0' },
-  { to: '/dashboard', label: 'Statistika', desc: 'Tahlil va diagrammalar', color: '#8e44ad' },
-  { to: '/monitoring', label: 'Monitoring', desc: 'O‘zgarishlar jurnali', color: '#16a085' },
-  { to: '/urbanization', label: 'Urbanizatsiya', desc: '2000–2025 jarayoni', color: '#e67e22' },
-  { to: '/reports', label: 'Hisobotlar', desc: 'Excel / PDF eksport', color: '#c0392b' },
+  { to: '/map', label: 'Interaktiv xarita', desc: 'Kadastr xaritasi', color: '#38bdf8', Icon: IcoMap },
+  { to: '/dashboard', label: 'Statistika', desc: 'Tahlil va diagrammalar', color: '#a78bfa', Icon: IcoChart },
+  { to: '/monitoring', label: 'Monitoring', desc: 'Yillar bo‘yicha o‘zgarish', color: '#2dd4bf', Icon: IcoMonitor },
+  { to: '/urbanization', label: 'Urbanizatsiya', desc: '2000–2025 jarayoni', color: '#fb923c', Icon: IcoUrban },
+  { to: '/reports', label: 'Hisobotlar', desc: 'Excel / PDF eksport', color: '#f87171', Icon: IcoReport },
 ]
+
+const KPI_META = [
+  { key: 'objects', title: 'Jami obyektlar', Icon: IcoLayers, color: '#3b82f6' },
+  { key: 'area', title: 'Jami maydon', Icon: IcoArea, color: '#22c55e' },
+  { key: 'roads', title: 'Yo‘llar uzunligi', Icon: IcoRoad, color: '#f97316' },
+  { key: 'water', title: 'Sug‘orish tarmoqlari', Icon: IcoWater, color: '#38bdf8' },
+  { key: 'parks', title: 'Istirohat bog‘lari', Icon: IcoPark, color: '#16a34a' },
+  { key: 'cemeteries', title: 'Qabristonlar', Icon: IcoCemetery, color: '#94a3b8' },
+]
+
+const AXIS = { fill: '#93a4bb', fontSize: 11 }
+const GRID = { stroke: 'rgba(148,163,184,0.12)', strokeDasharray: '4 6' }
+
+function ChartTip({ active, payload, label, unit = '' }) {
+  if (!active || !payload?.length) return null
+  const row = payload[0].payload
+  const suffix = row.unit || unit
+  return (
+    <div className="home-tooltip">
+      <strong>{label || row.name}</strong>
+      <em>{Number(payload[0].value).toLocaleString('ru-RU')} {suffix}</em>
+    </div>
+  )
+}
+
+const TIP_PROPS = {
+  content: <ChartTip />,
+  cursor: false,
+  wrapperStyle: { outline: 'none', background: 'transparent', border: 'none', boxShadow: 'none' },
+}
+
+function fmtVal(v) {
+  const n = Number(v)
+  if (!Number.isFinite(n) || n === 0) return ''
+  return n >= 100 ? n.toLocaleString('ru-RU', { maximumFractionDigits: 0 }) : n.toLocaleString('ru-RU', { maximumFractionDigits: 1 })
+}
 
 export default function HomePage() {
   const [data, setData] = useState(null)
-  const [year, setYear] = useState(2026)
   const [error, setError] = useState(null)
 
   useEffect(() => {
-    statsApi.dashboard({ year })
+    statsApi.dashboard({ year: 2026 })
       .then(({ data: d }) => setData(d))
       .catch((e) => setError(e.message || 'Yuklash xatosi'))
-  }, [year])
+  }, [])
+
+  const researchCats = useMemo(
+    () => filterResearchCategoryStats(data?.by_category || []).map((c) => ({
+      ...c,
+      name: c.code === 'istirohat' ? "Istirohat bog'lari" : c.name,
+    })),
+    [data],
+  )
+
+  const roadClasses = useMemo(() => {
+    return (data?.road_by_class || [])
+      .filter((r) => ROAD_CLASS_LABELS[r.code])
+      .map((r) => ({
+        ...r,
+        name: ROAD_CLASS_LABELS[r.code],
+      }))
+  }, [data])
+
+  const objectStats = useMemo(() => researchCats.map((c) => {
+    const isLine = c.code === 'yollar' || c.code === 'suv'
+    return {
+      ...c,
+      metric: isLine ? Number(c.length_km || 0) : Number(c.area_ha || 0),
+      unit: isLine ? 'km' : 'ga',
+    }
+  }), [researchCats])
 
   if (error) return <div className="page-loading">Xato: {error}</div>
   if (!data) return <div className="page-loading">Bosh sahifa yuklanmoqda...</div>
 
-  const { kpis, project, meta, notice, by_category, area_dynamics, road_by_class, recent_changes } = data
-  const pieData = by_category
-    .filter((c) => c.area_ha > 0)
-    .slice(0, 6)
-    .map((c) => ({ name: c.name, value: c.area_ha, color: c.color }))
+  const { kpis, project, meta, recent_changes, area_dynamics } = data
+  const updated = new Date(meta.last_updated)
+
+  const fmt = (n) => Number(n ?? 0).toLocaleString('ru-RU')
+  const kpiValues = {
+    objects: { value: fmt(kpis.total_objects), unit: 'ta' },
+    area: { value: fmt(kpis.total_area_ha), unit: 'ga' },
+    roads: { value: fmt(kpis.roads_length_km), unit: 'km' },
+    water: { value: fmt(kpis.water_length_km), unit: 'km' },
+    parks: { value: fmt(kpis.parks_count), unit: `ta / ${kpis.parks_area_ha} ga` },
+    cemeteries: { value: fmt(kpis.cemeteries_count), unit: `ta / ${kpis.cemeteries_area_ha} ga` },
+  }
 
   return (
     <div className="home-page">
-      <header className="home-hero">
+      <header className="home-hero home-hero-compact">
         <div className="home-hero-text">
-          <p className="eyebrow">Buxoro shahri · Geoinformatsion tizim</p>
+          <p className="eyebrow">Buxoro shahri — geoinformatsion tizim</p>
           <h1>{project.name}</h1>
-          <p className="hero-desc">{project.title_uz}</p>
-          <p className="hero-sub">{project.description_uz}</p>
+          <p className="hero-desc">
+            Umumiy foydalanishdagi yer obyektlarining elektron reyestri va monitoringi.
+            Yo‘llar, sug‘orish tarmoqlari, istirohat bog‘lari va qabristonlar yagona
+            geoinformatsion platformada yuritiladi.
+          </p>
+          <div className="hero-chips">
+            <span>Yo‘llar</span>
+            <span>Sug‘orish</span>
+            <span>Bog‘lar</span>
+            <span>Qabristonlar</span>
+          </div>
+          <Link to="/map" className="hero-cta">
+            Interaktiv xaritani ochish <IcoArrow size={18} />
+          </Link>
         </div>
-        <div className="home-hero-meta">
-          <div className="meta-card">
-            <span>Monitoring yili</span>
-            <select value={year} onChange={(e) => setYear(Number(e.target.value))}>
-              {(meta.monitoring_years || []).map((y) => (
-                <option key={y} value={y}>{y}</option>
-              ))}
-            </select>
-          </div>
-          <div className="meta-card">
-            <span>Oxirgi yangilanish</span>
-            <strong>{new Date(meta.last_updated).toLocaleString('uz')}</strong>
-          </div>
-          {notice && (
-            <div className="meta-card notice">
-              <span>Administrator xabari</span>
-              <strong>{notice.title}</strong>
-              <p>{notice.message}</p>
+        <div className="home-hero-meta home-status-row">
+          <div className="meta-card meta-card--year">
+            <span className="meta-card__icon"><IcoCalendar size={28} /></span>
+            <div className="meta-card__body">
+              <span>Monitoring yili</span>
+              <strong>{meta.selected_year || meta.current_monitoring_year || 2026}</strong>
             </div>
-          )}
+          </div>
+          <div className="meta-card meta-card--time">
+            <span className="meta-card__icon"><IcoClock size={28} /></span>
+            <div className="meta-card__body">
+              <span>Oxirgi yangilanish</span>
+              <strong>
+                {updated.toLocaleDateString('uz-UZ')}
+                <small>{updated.toLocaleTimeString('uz-UZ', { hour: '2-digit', minute: '2-digit' })}</small>
+              </strong>
+            </div>
+          </div>
+          <div className="meta-card meta-card--data ok">
+            <span className="meta-card__icon"><IcoDatabase size={28} /></span>
+            <div className="meta-card__body">
+              <span>Ma'lumot holati</span>
+              <strong>
+                <span className="status-badge status-badge--ok">
+                  <IcoCheck size={14} /> Aktual
+                </span>
+              </strong>
+            </div>
+          </div>
+          <div className="meta-card meta-card--sys ok">
+            <span className="meta-card__icon"><IcoCloud size={28} /></span>
+            <div className="meta-card__body">
+              <span>Tizim holati</span>
+              <strong>
+                <span className="status-badge status-badge--live">
+                  <span className="status-dot" /> Faol
+                </span>
+              </strong>
+            </div>
+          </div>
         </div>
       </header>
 
       <section className="kpi-grid">
-        <Kpi title="Jami obyektlar" value={kpis.total_objects.toLocaleString()} growth={kpis.total_objects_growth_pct} />
-        <Kpi title="Jami maydon" value={`${kpis.total_area_ha.toLocaleString()} ga`} growth={kpis.total_area_growth_pct} />
-        <Kpi title="Yo‘llar uzunligi" value={`${kpis.roads_length_km.toLocaleString()} km`} growth={kpis.roads_growth_pct} />
-        <Kpi title="Suv tarmoqlari" value={`${kpis.water_length_km.toLocaleString()} km`} />
-        <Kpi title="Istirohat bog‘lari" value={`${kpis.parks_count} / ${kpis.parks_area_ha} ga`} />
-        <Kpi title="Qabristonlar" value={`${kpis.cemeteries_count} / ${kpis.cemeteries_area_ha} ga`} />
+        {KPI_META.map((k) => (
+          <div key={k.key} className="kpi-card">
+            <span className="kpi-card__icon" style={{ color: k.color, background: `${k.color}22` }}>
+              <k.Icon size={32} />
+            </span>
+            <div className="kpi-card__body">
+              <span className="kpi-title">{k.title}</span>
+              <strong className="kpi-value">{kpiValues[k.key].value}</strong>
+              <span className="kpi-unit">{kpiValues[k.key].unit}</span>
+            </div>
+          </div>
+        ))}
       </section>
 
-      <section className="home-charts">
+      <section className="home-mid-grid">
+        <div className="chart-card mini-map-card">
+          <h3>Buxoro shahri — mini xarita</h3>
+          <MiniMapPreview />
+          <div className="mini-legend">
+            {LAYER_GROUPS.map((g) => (
+              <span key={g.key}><i style={{ background: g.color }} /> {g.name}</span>
+            ))}
+          </div>
+        </div>
+
+        <div className="chart-card coverage-card">
+          <h3>Hududiy qamrov</h3>
+          <ul className="coverage-list">
+            <li>
+              <span className="coverage-list__icon" style={{ color: '#38bdf8' }}><IcoCity size={24} /></span>
+              <span className="coverage-list__text">
+                <small>Buxoro shahri maydoni</small>
+                <strong>7 966 ga</strong>
+              </span>
+            </li>
+            <li>
+              <span className="coverage-list__icon" style={{ color: '#818cf8' }}><IcoMahalla size={24} /></span>
+              <span className="coverage-list__text">
+                <small>MFY soni</small>
+                <strong>65 ta</strong>
+              </span>
+            </li>
+            <li>
+              <span className="coverage-list__icon" style={{ color: '#34d399' }}><IcoPercent size={24} /></span>
+              <span className="coverage-list__text">
+                <small>Monitoring qamrovi</small>
+                <strong>100%</strong>
+                <span className="coverage-bar"><i style={{ width: '100%' }} /></span>
+              </span>
+            </li>
+            <li>
+              <span className="coverage-list__icon" style={{ color: '#fb923c' }}><IcoCalendar size={24} /></span>
+              <span className="coverage-list__text">
+                <small>Oxirgi monitoring</small>
+                <strong>{meta.current_monitoring_year || 2026} yil</strong>
+              </span>
+            </li>
+          </ul>
+        </div>
+
         <div className="chart-card">
-          <h3>Kategoriyalar bo‘yicha maydon</h3>
-          <ResponsiveContainer width="100%" height={260}>
-            <PieChart>
-              <Pie data={pieData} dataKey="value" nameKey="name" innerRadius={55} outerRadius={90} label>
-                {pieData.map((e, i) => <Cell key={i} fill={e.color} />)}
-              </Pie>
-              <Tooltip />
-              <Legend />
-            </PieChart>
+          <h3>Asosiy obyektlar bo‘yicha statistika</h3>
+          <ResponsiveContainer width="100%" height={240}>
+            <BarChart data={objectStats} layout="vertical" margin={{ left: 8, right: 36, top: 4, bottom: 0 }} barCategoryGap={14}>
+              <CartesianGrid horizontal={false} {...GRID} />
+              <XAxis type="number" tick={AXIS} axisLine={false} tickLine={false} />
+              <YAxis type="category" dataKey="name" width={118} tick={AXIS} axisLine={false} tickLine={false} />
+              <Tooltip {...TIP_PROPS} />
+              <Bar dataKey="metric" name="Qiymat" radius={[0, 8, 8, 0]} barSize={16} background={{ fill: 'rgba(148,163,184,0.08)', radius: 8 }} activeBar={false}>
+                {objectStats.map((c) => (
+                  <Cell key={c.code} fill={c.color} />
+                ))}
+                <LabelList dataKey="metric" position="right" fill="#d7e2ef" fontSize={11} formatter={fmtVal} />
+              </Bar>
+            </BarChart>
           </ResponsiveContainer>
         </div>
+      </section>
+
+      <section className="home-charts home-charts-3">
         <div className="chart-card">
           <h3>Maydon dinamikasi (ga) · 2018–2026</h3>
-          <ResponsiveContainer width="100%" height={260}>
-            <AreaChart data={area_dynamics}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#333" />
-              <XAxis dataKey="year" tick={{ fill: '#aaa' }} />
-              <YAxis tick={{ fill: '#aaa' }} />
-              <Tooltip contentStyle={{ background: '#1a2332', border: '1px solid #333' }} />
-              <Area type="monotone" dataKey="area_ha" stroke="#2d8cf0" fill="#2d8cf055" name="Maydon (ga)" />
+          <ResponsiveContainer width="100%" height={240}>
+            <AreaChart data={area_dynamics} margin={{ left: 0, right: 8, top: 8, bottom: 0 }}>
+              <defs>
+                <linearGradient id="areaFill" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#38bdf8" stopOpacity={0.42} />
+                  <stop offset="100%" stopColor="#38bdf8" stopOpacity={0.02} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid vertical={false} {...GRID} />
+              <XAxis dataKey="year" tick={AXIS} axisLine={false} tickLine={false} />
+              <YAxis tick={AXIS} axisLine={false} tickLine={false} />
+              <Tooltip content={<ChartTip unit="ga" />} cursor={false} wrapperStyle={TIP_PROPS.wrapperStyle} />
+              <Area type="monotone" dataKey="area_ha" stroke="#38bdf8" strokeWidth={2.4} fill="url(#areaFill)" name="Maydon" />
             </AreaChart>
           </ResponsiveContainer>
         </div>
         <div className="chart-card">
-          <h3>Yo‘l toifalari bo‘yicha uzunlik (km)</h3>
-          <ResponsiveContainer width="100%" height={260}>
-            <BarChart data={road_by_class} layout="vertical" margin={{ left: 20 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#333" />
-              <XAxis type="number" tick={{ fill: '#aaa' }} />
-              <YAxis type="category" dataKey="name" width={120} tick={{ fill: '#aaa', fontSize: 11 }} />
-              <Tooltip contentStyle={{ background: '#1a2332', border: '1px solid #333' }} />
-              <Bar dataKey="length_km" fill="#9b59b6" name="km" />
+          <h3>Yo‘llar toifalari bo‘yicha uzunlik (km)</h3>
+          <ResponsiveContainer width="100%" height={240}>
+            <BarChart data={roadClasses} layout="vertical" margin={{ left: 8, right: 36, top: 4, bottom: 0 }} barCategoryGap={18}>
+              <defs>
+                <linearGradient id="roadBar" x1="0" y1="0" x2="1" y2="0">
+                  <stop offset="0%" stopColor="#fdba74" />
+                  <stop offset="100%" stopColor="#f97316" />
+                </linearGradient>
+              </defs>
+              <CartesianGrid horizontal={false} {...GRID} />
+              <XAxis type="number" tick={AXIS} axisLine={false} tickLine={false} />
+              <YAxis type="category" dataKey="name" width={90} tick={AXIS} axisLine={false} tickLine={false} />
+              <Tooltip content={<ChartTip unit="km" />} cursor={false} wrapperStyle={TIP_PROPS.wrapperStyle} />
+              <Bar dataKey="length_km" fill="url(#roadBar)" name="km" radius={[0, 8, 8, 0]} barSize={18} background={{ fill: 'rgba(148,163,184,0.08)', radius: 8 }} activeBar={false}>
+                <LabelList dataKey="length_km" position="right" fill="#d7e2ef" fontSize={11} formatter={fmtVal} />
+              </Bar>
             </BarChart>
           </ResponsiveContainer>
         </div>
-        <div className="chart-card">
+        <div className="chart-card changes-card">
           <h3>Oxirgi o‘zgarishlar</h3>
           <ul className="change-list">
             {(recent_changes || []).slice(0, 6).map((c) => (
               <li key={c.id}>
-                <strong>{c.land_public_id || c.land_name}</strong>
-                <span>{c.description || c.change_type}</span>
-                <small>{new Date(c.changed_at).toLocaleString('uz')}</small>
+                <span className="change-list__icon"><IcoLayers size={16} /></span>
+                <div>
+                  <strong>{c.land_name || c.description}</strong>
+                  <span>{c.description || c.change_type}</span>
+                  <small>{new Date(c.changed_at).toLocaleDateString('uz-UZ')}</small>
+                </div>
               </li>
             ))}
-            {!recent_changes?.length && <li>Hozircha yozuv yo‘q</li>}
+            {!recent_changes?.length && <li className="change-list__empty">Hozircha yozuv yo‘q</li>}
           </ul>
-          <div className="year-chips">
-            <div>
-              <small>Monitoring yillari</small>
-              <div>{(meta.monitoring_years || []).map((y) => <span key={y} className="chip">{y}</span>)}</div>
-            </div>
-            <div>
-              <small>Urbanizatsiya yillari</small>
-              <div>{(meta.urbanization_years || []).map((y) => <span key={y} className="chip chip-orange">{y}</span>)}</div>
-            </div>
-          </div>
+          <Link to="/monitoring" className="link-more">
+            Barchasini ko‘rish <IcoArrow size={16} />
+          </Link>
         </div>
       </section>
 
@@ -141,27 +321,30 @@ export default function HomePage() {
         <h2>Tezkor havolalar</h2>
         <div className="quick-grid">
           {QUICK.map((q) => (
-            <Link key={q.to} to={q.to} className="quick-card" style={{ borderTopColor: q.color }}>
+            <Link key={q.to} to={q.to} className="quick-card" style={{ '--quick-accent': q.color }}>
+              <span className="quick-card__icon"><q.Icon size={26} /></span>
               <h3>{q.label}</h3>
               <p>{q.desc}</p>
+              <em>Ochish <IcoArrow size={14} /></em>
             </Link>
           ))}
         </div>
       </section>
-    </div>
-  )
-}
 
-function Kpi({ title, value, growth }) {
-  return (
-    <div className="kpi-card">
-      <span className="kpi-title">{title}</span>
-      <strong className="kpi-value">{value}</strong>
-      {growth != null && (
-        <span className={`kpi-growth ${growth >= 0 ? 'up' : 'down'}`}>
-          {growth >= 0 ? '+' : ''}{growth}%
-        </span>
-      )}
+      <footer className="home-footer">
+        <div>
+          <h4>Ma'lumot manbalari</h4>
+          <p>Davlat kadastrlari palatasi · OSM · Sentinel-2 · Landsat 8 · Buxoro shahar kadastri</p>
+        </div>
+        <div>
+          <h4>Texnologiyalar</h4>
+          <p>Leaflet · PostgreSQL / PostGIS · GeoServer</p>
+        </div>
+        <div>
+          <h4>Platforma</h4>
+          <p>© {new Date().getFullYear()} Buxoro GIS · Elektron reyestr va monitoring</p>
+        </div>
+      </footer>
     </div>
   )
 }
