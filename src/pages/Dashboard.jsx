@@ -7,7 +7,9 @@ import { statsApi } from '../api/services'
 import {
   IcoArea, IcoLayers, IcoPark, IcoRoad, IcoWater, IcoCemetery,
 } from '../components/HomeIcons'
-import { filterResearchCategoryStats, ROAD_CLASS_LABELS } from '../constants/researchLayers'
+import { filterResearchCategoryStats } from '../constants/researchLayers'
+import { useI18n } from '../i18n/I18nContext'
+import PageLoader from '../components/PageLoader'
 
 const AXIS = { fill: '#93a4bb', fontSize: 11 }
 const GRID = { stroke: 'rgba(148,163,184,0.12)', strokeDasharray: '4 6' }
@@ -37,54 +39,52 @@ function fmt(n) {
   return Number(n ?? 0).toLocaleString('ru-RU')
 }
 
-const SHORT_NAME = {
-  yollar: "Avtomobil yo'llari",
-  suv: "Sug'orish tarmoqlari",
-  istirohat: "Istirohat bog'lari",
-  qabriston: 'Qabristonlar',
-}
-
 export default function Dashboard() {
+  const { t } = useI18n()
   const [data, setData] = useState(null)
+  const [error, setError] = useState(null)
 
   useEffect(() => {
-    statsApi.dashboard().then(({ data: d }) => setData(d))
-  }, [])
+    statsApi.dashboard()
+      .then(({ data: d }) => setData(d))
+      .catch(() => setError(t('msg.loadFail')))
+  }, [t])
 
   const cats = useMemo(() => filterResearchCategoryStats(data?.by_category || []).map((c) => {
     const isLine = c.code === 'yollar' || c.code === 'suv'
     return {
       ...c,
-      name: SHORT_NAME[c.code] || c.name,
+      name: t(`layer.${c.code === 'park' ? 'istirohat' : c.code}`),
       metric: isLine ? Number(c.length_km || 0) : Number(c.area_ha || 0),
-      unit: isLine ? 'km' : 'ga',
+      unit: isLine ? t('unit.km') : t('unit.ha'),
     }
-  }), [data])
+  }), [data, t])
 
   const roads = useMemo(() => (data?.road_by_class || [])
-    .filter((r) => ROAD_CLASS_LABELS[r.code])
-    .map((r) => ({ ...r, name: ROAD_CLASS_LABELS[r.code] })), [data])
+    .filter((r) => ['magistral', 'shahar', 'mahalliy'].includes(r.code))
+    .map((r) => ({ ...r, name: t(`road.${r.code}`) })), [data, t])
 
-  if (!data) return <div className="page-loading">Statistika yuklanmoqda...</div>
+  if (error) return <div className="page-loading">{error}</div>
+  if (!data) return <PageLoader />
 
   const { kpis, area_dynamics } = data
 
   const cards = [
-    { title: 'Jami obyektlar', value: fmt(kpis.total_objects), unit: 'ta', Icon: IcoLayers, color: '#3b82f6' },
-    { title: 'Jami maydon', value: fmt(kpis.total_area_ha), unit: 'ga', Icon: IcoArea, color: '#22c55e' },
-    { title: 'Yo‘llar uzunligi', value: fmt(kpis.roads_length_km), unit: 'km', Icon: IcoRoad, color: '#f97316' },
-    { title: 'Sug‘orish tarmoqlari', value: fmt(kpis.water_length_km), unit: 'km', Icon: IcoWater, color: '#38bdf8' },
-    { title: 'Istirohat bog‘lari', value: fmt(kpis.parks_count), unit: `ta / ${kpis.parks_area_ha} ga`, Icon: IcoPark, color: '#16a34a' },
-    { title: 'Qabristonlar', value: fmt(kpis.cemeteries_count), unit: `ta / ${kpis.cemeteries_area_ha} ga`, Icon: IcoCemetery, color: '#94a3b8' },
+    { title: t('home.kpi.objects'), value: fmt(kpis.total_objects), unit: t('unit.pcs'), Icon: IcoLayers, color: '#3b82f6' },
+    { title: t('home.kpi.area'), value: fmt(kpis.total_area_ha), unit: t('unit.ha'), Icon: IcoArea, color: '#22c55e' },
+    { title: t('home.kpi.roads'), value: fmt(kpis.roads_length_km), unit: t('unit.km'), Icon: IcoRoad, color: '#f97316' },
+    { title: t('home.kpi.water'), value: fmt(kpis.water_length_km), unit: t('unit.km'), Icon: IcoWater, color: '#38bdf8' },
+    { title: t('home.kpi.parks'), value: fmt(kpis.parks_count), unit: `${t('unit.pcs')} / ${kpis.parks_area_ha} ${t('unit.ha')}`, Icon: IcoPark, color: '#16a34a' },
+    { title: t('home.kpi.cemeteries'), value: fmt(kpis.cemeteries_count), unit: `${t('unit.pcs')} / ${kpis.cemeteries_area_ha} ${t('unit.ha')}`, Icon: IcoCemetery, color: '#94a3b8' },
   ]
 
   return (
     <div className="dashboard-page">
       <header className="dash-head">
         <div>
-          <p className="eyebrow">Tahlil</p>
-          <h2>Statistika va tahlil</h2>
-          <p className="muted">Asosiy obyektlar, maydon dinamikasi va yo‘l toifalari</p>
+          <p className="eyebrow">{t('dash.eyebrow')}</p>
+          <h2>{t('dash.title')}</h2>
+          <p className="muted">{t('dash.sub')}</p>
         </div>
       </header>
 
@@ -105,7 +105,7 @@ export default function Dashboard() {
 
       <div className="charts-grid">
         <div className="chart-card">
-          <h3>Asosiy obyektlar bo‘yicha ko‘rsatkich</h3>
+          <h3>{t('dash.byObjects')}</h3>
           <ResponsiveContainer width="100%" height={280}>
             <BarChart data={cats} layout="vertical" margin={{ left: 8, right: 40, top: 8, bottom: 4 }} barCategoryGap={18}>
               <CartesianGrid horizontal={false} {...GRID} />
@@ -121,7 +121,7 @@ export default function Dashboard() {
         </div>
 
         <div className="chart-card">
-          <h3>Yillar bo‘yicha maydon dinamikasi (ga)</h3>
+          <h3>{t('dash.areaDyn')}</h3>
           <ResponsiveContainer width="100%" height={280}>
             <AreaChart data={area_dynamics} margin={{ left: 0, right: 12, top: 12, bottom: 4 }}>
               <defs>
@@ -133,14 +133,14 @@ export default function Dashboard() {
               <CartesianGrid vertical={false} {...GRID} />
               <XAxis dataKey="year" tick={AXIS} axisLine={false} tickLine={false} />
               <YAxis tick={AXIS} axisLine={false} tickLine={false} />
-              <Tooltip content={<ChartTip unit="ga" />} cursor={false} wrapperStyle={TIP_WRAP} />
-              <Area type="monotone" dataKey="area_ha" stroke="#38bdf8" strokeWidth={2.4} fill="url(#dashArea)" name="Maydon" />
+              <Tooltip content={<ChartTip unit={t('unit.ha')} />} cursor={false} wrapperStyle={TIP_WRAP} />
+              <Area type="monotone" dataKey="area_ha" stroke="#38bdf8" strokeWidth={2.4} fill="url(#dashArea)" name={t('compare.area')} />
             </AreaChart>
           </ResponsiveContainer>
         </div>
 
         <div className="chart-card full">
-          <h3>Yo‘l toifalari bo‘yicha uzunlik (km)</h3>
+          <h3>{t('dash.roads')}</h3>
           <ResponsiveContainer width="100%" height={260}>
             <BarChart data={roads} layout="vertical" margin={{ left: 8, right: 48, top: 8, bottom: 4 }} barCategoryGap={22}>
               <defs>
@@ -152,7 +152,7 @@ export default function Dashboard() {
               <CartesianGrid horizontal={false} {...GRID} />
               <XAxis type="number" tick={AXIS} axisLine={false} tickLine={false} />
               <YAxis type="category" dataKey="name" width={100} tick={AXIS} axisLine={false} tickLine={false} interval={0} />
-              <Tooltip content={<ChartTip unit="km" />} cursor={false} wrapperStyle={TIP_WRAP} />
+              <Tooltip content={<ChartTip unit={t('unit.km')} />} cursor={false} wrapperStyle={TIP_WRAP} />
               <Bar dataKey="length_km" fill="url(#dashRoad)" radius={[0, 8, 8, 0]} barSize={22} background={{ fill: 'rgba(148,163,184,0.08)', radius: 8 }} activeBar={false}>
                 <LabelList dataKey="length_km" position="right" fill="#d7e2ef" fontSize={12} formatter={fmtVal} />
               </Bar>

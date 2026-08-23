@@ -1,5 +1,6 @@
 import { adminApi } from '../api/services'
 import AdminCrudPage from './AdminCrudPage'
+import { CURRENT_YEAR, YEARS } from '../constants/years'
 
 const ROLE_OPTS = [
   { value: 'admin', label: 'Администратор' },
@@ -39,6 +40,14 @@ export function AdminUsersPage() {
       config={{
         title: 'Пользователи',
         subtitle: 'Управление доступом и ролями',
+        help: {
+          title: 'Инструкция',
+          steps: [
+            'Создайте пользователя: логин, пароль, роль.',
+            'Администратор видит эту панель. Наблюдатель — только сайт.',
+            'Клиент регистрируется на сайте как наблюдатель; роль меняется здесь.',
+          ],
+        },
         api: adminApi.users,
         columns: [
           { key: 'id', label: 'ID' },
@@ -46,6 +55,10 @@ export function AdminUsersPage() {
           { key: 'email', label: 'Email' },
           { key: 'role', label: 'Роль', render: (v) => ROLE_OPTS.find((o) => o.value === v)?.label || v },
           { key: 'organization', label: 'Организация' },
+          { key: 'sector', label: 'Сектор' },
+          { key: 'region', label: 'Область' },
+          { key: 'district', label: 'Район' },
+          { key: 'purpose', label: 'Цель' },
           { key: 'is_active', label: 'Активен', render: bool },
           { key: 'is_superuser', label: 'Супер', render: bool },
         ],
@@ -58,6 +71,13 @@ export function AdminUsersPage() {
           { key: 'role', label: 'Роль', type: 'select', options: ROLE_OPTS },
           { key: 'organization', label: 'Организация' },
           { key: 'phone', label: 'Телефон' },
+          { key: 'job_title', label: 'Должность' },
+          { key: 'sector', label: 'Сектор' },
+          { key: 'region', label: 'Область' },
+          { key: 'district', label: 'Район / город' },
+          { key: 'purpose', label: 'Цель использования' },
+          { key: 'interest_layers', label: 'Интерес к слоям' },
+          { key: 'comment', label: 'Комментарий', type: 'textarea' },
           { key: 'is_active', label: 'Активен', type: 'checkbox' },
           { key: 'is_staff', label: 'Staff', type: 'checkbox' },
           { key: 'is_superuser', label: 'Суперпользователь', type: 'checkbox' },
@@ -74,6 +94,14 @@ export function AdminCategoriesPage() {
       config={{
         title: 'Категории слоёв',
         subtitle: 'GIS-категории объектов',
+        help: {
+          title: 'Инструкция',
+          steps: [
+            'Категория = слой на карте (дороги, парки, кладбища).',
+            'Цвет категории рисует все объекты этого слоя.',
+            'Код (istirohat, yollar, suv) лучше не менять после импорта.',
+          ],
+        },
         api: {
           ...adminApi.categories,
           update: (code, data) => adminApi.categories.update(code, data),
@@ -91,16 +119,19 @@ export function AdminCategoriesPage() {
         ],
         fields: [
           { key: 'code', label: 'Код *' },
-          { key: 'name_uz', label: 'Название (UZ) *' },
-          { key: 'name_ru', label: 'Название (RU)' },
+          { key: 'name_uz', label: 'Название (UZ) *', lang: 'uz' },
+          { key: 'name_ru', label: 'Название (RU)', lang: 'ru' },
+          { key: 'name_en', label: 'Название (EN)', lang: 'en' },
           { key: 'geometry_type', label: 'Тип геометрии', type: 'select', options: [
             { value: 'Point', label: 'Точка' },
             { value: 'LineString', label: 'Линия' },
             { value: 'Polygon', label: 'Полигон' },
           ]},
-          { key: 'color', label: 'Цвет', placeholder: '#3498db' },
+          { key: 'color', label: 'Цвет', type: 'color' },
           { key: 'icon', label: 'Иконка' },
-          { key: 'description', label: 'Описание', type: 'textarea' },
+          { key: 'description', label: 'Описание (UZ)', type: 'textarea', lang: 'uz' },
+          { key: 'description_ru', label: 'Описание (RU)', type: 'textarea', lang: 'ru' },
+          { key: 'description_en', label: 'Описание (EN)', type: 'textarea', lang: 'en' },
           { key: 'order', label: 'Порядок', type: 'number' },
           { key: 'is_active', label: 'Активна', type: 'checkbox' },
         ],
@@ -116,6 +147,14 @@ export function AdminLandsPage() {
       config={{
         title: 'Реестр объектов',
         subtitle: 'Земли общего пользования',
+        help: {
+          title: 'Инструкция',
+          steps: [
+            'Здесь все объекты: парки, дороги, каналы.',
+            'Год — ключ для ползунка карты и графиков 2018–2026.',
+            'Массовая загрузка — через «Импорт файлов», не вручную.',
+          ],
+        },
         api: adminApi.lands,
         columns: [
           { key: 'public_id', label: 'ID' },
@@ -128,7 +167,9 @@ export function AdminLandsPage() {
           { key: 'is_active', label: 'Активен', render: bool },
         ],
         fields: [
-          { key: 'name', label: 'Название *' },
+          { key: 'name', label: 'Название (UZ) *', lang: 'uz' },
+          { key: 'name_ru', label: 'Название (RU)', lang: 'ru' },
+          { key: 'name_en', label: 'Название (EN)', lang: 'en' },
           { key: 'category', label: 'ID категории *', type: 'number' },
           { key: 'status', label: 'Статус', type: 'select', options: STATUS_OPTS },
           { key: 'condition', label: 'Состояние', type: 'select', options: [
@@ -142,17 +183,21 @@ export function AdminLandsPage() {
             { value: 'mahalliy', label: 'Местная' },
             { value: 'piyoda', label: 'Пешеходная' },
           ]},
-          { key: 'address', label: 'Адрес' },
+          { key: 'address', label: 'Адрес (UZ)', lang: 'uz' },
+          { key: 'address_ru', label: 'Адрес (RU)', lang: 'ru' },
+          { key: 'address_en', label: 'Адрес (EN)', lang: 'en' },
           { key: 'mahalla', label: 'Махалля' },
           { key: 'cadastral_number', label: 'Кадастр' },
-          { key: 'monitoring_year', label: 'Год мониторинга', type: 'number' },
+          { key: 'monitoring_year', label: 'Год мониторинга', type: 'select', options: YEARS.map((y) => ({ value: y, label: String(y) })) },
           { key: 'responsible_org', label: 'Ответственная организация' },
-          { key: 'description', label: 'Описание', type: 'textarea' },
+          { key: 'description', label: 'Описание (UZ)', type: 'textarea', lang: 'uz' },
+          { key: 'description_ru', label: 'Описание (RU)', type: 'textarea', lang: 'ru' },
+          { key: 'description_en', label: 'Описание (EN)', type: 'textarea', lang: 'en' },
           { key: 'data_source', label: 'Источник данных' },
           { key: 'geometry', label: 'Геометрия (GeoJSON)', type: 'json', rows: 6 },
           { key: 'is_active', label: 'Активен', type: 'checkbox' },
         ],
-        defaultForm: { status: 'active', condition: 'normal', is_active: true, monitoring_year: 2026 },
+        defaultForm: { status: 'active', condition: 'normal', is_active: true, monitoring_year: CURRENT_YEAR },
       }}
     />
   )
@@ -164,6 +209,13 @@ export function AdminBoundariesPage() {
       config={{
         title: 'Границы',
         subtitle: 'Город / область',
+        help: {
+          title: 'Инструкция',
+          steps: [
+            'Граница города: Buxoro_shahar_YYYY.zip как «Граница».',
+            'Не путать со слоем парков — это контур, не объекты.',
+          ],
+        },
         api: adminApi.boundaries,
         columns: [
           { key: 'code', label: 'Код' },
@@ -175,7 +227,9 @@ export function AdminBoundariesPage() {
         ],
         fields: [
           { key: 'code', label: 'Код *' },
-          { key: 'name', label: 'Название *' },
+          { key: 'name', label: 'Название (UZ) *', lang: 'uz' },
+          { key: 'name_ru', label: 'Название (RU)', lang: 'ru' },
+          { key: 'name_en', label: 'Название (EN)', lang: 'en' },
           { key: 'boundary_type', label: 'Тип', type: 'select', options: [
             { value: 'city', label: 'Город' },
             { value: 'region', label: 'Область' },
@@ -199,6 +253,10 @@ export function AdminMahallasPage() {
     <AdminCrudPage
       config={{
         title: 'Махалли',
+        help: {
+          title: 'Инструкция',
+          steps: ['Справочник МФЙ. Можно привязать к объектам в реестре.'],
+        },
         api: adminApi.mahallas,
         columns: [
           { key: 'code', label: 'Код' },
@@ -207,7 +265,9 @@ export function AdminMahallasPage() {
         ],
         fields: [
           { key: 'code', label: 'Код *' },
-          { key: 'name', label: 'Название *' },
+          { key: 'name', label: 'Название (UZ) *', lang: 'uz' },
+          { key: 'name_ru', label: 'Название (RU)', lang: 'ru' },
+          { key: 'name_en', label: 'Название (EN)', lang: 'en' },
           { key: 'geometry', label: 'Геометрия (GeoJSON)', type: 'json' },
           { key: 'is_active', label: 'Активна', type: 'checkbox' },
         ],
@@ -222,6 +282,13 @@ export function AdminYearsPage() {
     <AdminCrudPage
       config={{
         title: 'Годы мониторинга',
+        help: {
+          title: 'Инструкция',
+          steps: [
+            'Годы 2018, 2020, 2022, 2024, 2026 — как у файлов клиента.',
+            'Импорт должен совпадать с годом из этого списка.',
+          ],
+        },
         api: adminApi.years,
         columns: [
           { key: 'year', label: 'Год' },
@@ -252,6 +319,10 @@ export function AdminVersionsPage() {
       config={{
         title: 'Версии объектов',
         subtitle: 'Снимки по годам',
+        help: {
+          title: 'Инструкция',
+          steps: ['Снимок объекта за год. Для истории одного парка.'],
+        },
         api: adminApi.versions,
         columns: [
           { key: 'id', label: 'ID' },
@@ -282,6 +353,10 @@ export function AdminRecordsPage() {
     <AdminCrudPage
       config={{
         title: 'Записи мониторинга',
+        help: {
+          title: 'Инструкция',
+          steps: ['Текстовые записи изменений (Δ га, Δ км) по объекту и году.'],
+        },
         api: adminApi.records,
         columns: [
           { key: 'id', label: 'ID' },
@@ -294,7 +369,9 @@ export function AdminRecordsPage() {
         fields: [
           { key: 'land', label: 'ID объекта *', type: 'number' },
           { key: 'year', label: 'Год *', type: 'number' },
-          { key: 'description', label: 'Описание', type: 'textarea' },
+          { key: 'description', label: 'Описание (UZ)', type: 'textarea', lang: 'uz' },
+          { key: 'description_ru', label: 'Описание (RU)', type: 'textarea', lang: 'ru' },
+          { key: 'description_en', label: 'Описание (EN)', type: 'textarea', lang: 'en' },
           { key: 'delta_area_ha', label: 'Δ площадь (га)', type: 'number', step: 0.0001 },
           { key: 'delta_length_km', label: 'Δ длина (км)', type: 'number', step: 0.001 },
           { key: 'status', label: 'Статус', type: 'select', options: [
@@ -314,6 +391,10 @@ export function AdminUrbanizationPage() {
     <AdminCrudPage
       config={{
         title: 'Слои урбанизации',
+        help: {
+          title: 'Инструкция',
+          steps: ['Отдельные слои 2000–2025 для страницы «Урбанизация» на сайте.'],
+        },
         api: adminApi.urbanization,
         columns: [
           { key: 'year', label: 'Год' },
@@ -325,7 +406,9 @@ export function AdminUrbanizationPage() {
         ],
         fields: [
           { key: 'year', label: 'Год *', type: 'number' },
-          { key: 'name', label: 'Название *' },
+          { key: 'name', label: 'Название (UZ) *', lang: 'uz' },
+          { key: 'name_ru', label: 'Название (RU)', lang: 'ru' },
+          { key: 'name_en', label: 'Название (EN)', lang: 'en' },
           { key: 'layer_kind', label: 'Тип', type: 'select', options: [
             { value: 'urban', label: 'Городская' },
             { value: 'agriculture', label: 'Сельхоз' },
@@ -334,7 +417,9 @@ export function AdminUrbanizationPage() {
           { key: 'area_ha', label: 'Площадь (га)', type: 'number' },
           { key: 'growth_pct', label: 'Рост %', type: 'number' },
           { key: 'color', label: 'Цвет' },
-          { key: 'note', label: 'Заметка', type: 'textarea' },
+          { key: 'note', label: 'Заметка (UZ)', type: 'textarea', lang: 'uz' },
+          { key: 'note_ru', label: 'Заметка (RU)', type: 'textarea', lang: 'ru' },
+          { key: 'note_en', label: 'Заметка (EN)', type: 'textarea', lang: 'en' },
           { key: 'geometry', label: 'Геометрия', type: 'json', rows: 5 },
           { key: 'is_visible', label: 'Видим', type: 'checkbox' },
         ],
@@ -349,6 +434,13 @@ export function AdminIssuesPage() {
     <AdminCrudPage
       config={{
         title: 'Проблемные участки',
+        help: {
+          title: 'Инструкция',
+          steps: [
+            'Точка / линия / полигон проблемы на карте.',
+            'Статус: новая → в работе → устранена.',
+          ],
+        },
         api: adminApi.issues,
         columns: [
           { key: 'id', label: 'ID' },
@@ -359,8 +451,12 @@ export function AdminIssuesPage() {
           { key: 'created_at', label: 'Создано', render: (v) => v ? new Date(v).toLocaleDateString('ru') : '—' },
         ],
         fields: [
-          { key: 'title', label: 'Заголовок *' },
-          { key: 'description', label: 'Описание *', type: 'textarea' },
+          { key: 'title', label: 'Заголовок (UZ) *', lang: 'uz' },
+          { key: 'title_ru', label: 'Заголовок (RU)', lang: 'ru' },
+          { key: 'title_en', label: 'Заголовок (EN)', lang: 'en' },
+          { key: 'description', label: 'Описание (UZ) *', type: 'textarea', lang: 'uz' },
+          { key: 'description_ru', label: 'Описание (RU)', type: 'textarea', lang: 'ru' },
+          { key: 'description_en', label: 'Описание (EN)', type: 'textarea', lang: 'en' },
           { key: 'severity', label: 'Важность', type: 'select', options: SEV_OPTS },
           { key: 'status', label: 'Статус', type: 'select', options: ISSUE_STATUS },
           { key: 'geometry_kind', label: 'Тип', type: 'select', options: [
@@ -385,6 +481,10 @@ export function AdminChangesPage() {
       config={{
         title: 'Журнал изменений',
         subtitle: 'Только просмотр',
+        help: {
+          title: 'Инструкция',
+          steps: ['Автожурнал: кто что изменил. Редактировать нельзя.'],
+        },
         api: adminApi.changes,
         readOnly: true,
         columns: [
@@ -407,6 +507,10 @@ export function AdminNoticesPage() {
       config={{
         title: 'Объявления системы',
         subtitle: 'Сообщения на главной панели',
+        help: {
+          title: 'Инструкция',
+          steps: ['Активное объявление показывается на главной сайта.'],
+        },
         api: adminApi.notices,
         columns: [
           { key: 'id', label: 'ID' },
@@ -415,8 +519,12 @@ export function AdminNoticesPage() {
           { key: 'updated_at', label: 'Обновлено', render: (v) => v ? new Date(v).toLocaleString('ru') : '—' },
         ],
         fields: [
-          { key: 'title', label: 'Заголовок *' },
-          { key: 'message', label: 'Текст *', type: 'textarea', rows: 5 },
+          { key: 'title', label: 'Заголовок (UZ) *', lang: 'uz' },
+          { key: 'title_ru', label: 'Заголовок (RU)', lang: 'ru' },
+          { key: 'title_en', label: 'Заголовок (EN)', lang: 'en' },
+          { key: 'message', label: 'Текст (UZ) *', type: 'textarea', rows: 5, lang: 'uz' },
+          { key: 'message_ru', label: 'Текст (RU)', type: 'textarea', rows: 5, lang: 'ru' },
+          { key: 'message_en', label: 'Текст (EN)', type: 'textarea', rows: 5, lang: 'en' },
           { key: 'is_active', label: 'Активно', type: 'checkbox' },
         ],
         defaultForm: { is_active: true },

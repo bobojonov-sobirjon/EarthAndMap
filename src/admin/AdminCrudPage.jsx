@@ -1,4 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import AdminGuide from './AdminGuide'
+import ColorField from './ColorField'
+import PrettySelect from '../components/PrettySelect'
+import { useI18n } from '../i18n/I18nContext'
+import { apiError } from '../i18n/apiError'
+import PageLoader from '../components/PageLoader'
 
 function unwrapList(data) {
   if (Array.isArray(data)) return data
@@ -49,16 +55,26 @@ function FieldInput({ field, value, onChange }) {
     )
   }
 
+  if (field.type === 'color') {
+    return (
+      <ColorField
+        label={field.label}
+        value={value || '#3388ff'}
+        onChange={(v) => onChange(field.key, v)}
+      />
+    )
+  }
+
   if (field.type === 'select') {
     return (
       <label className="admin-field">
         <span>{field.label}</span>
-        <select value={value ?? ''} onChange={common.onChange}>
-          <option value="">—</option>
-          {(field.options || []).map((o) => (
-            <option key={o.value} value={o.value}>{o.label}</option>
-          ))}
-        </select>
+        <PrettySelect
+          placeholder="—"
+          value={value ?? ''}
+      onChange={(v) => onChange(field.key, field.key === 'monitoring_year' ? Number(v) : v)}
+          options={field.options || []}
+        />
       </label>
     )
   }
@@ -84,16 +100,19 @@ export default function AdminCrudPage({ config }) {
   const {
     title, subtitle, api, idKey = 'id', columns, fields,
     readOnly = false, searchPlaceholder = 'Поиск...',
-    defaultForm = {},
+    defaultForm = {}, help,
   } = config
 
+  const { t } = useI18n()
   const [rows, setRows] = useState([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [error, setError] = useState('')
+  const [ok, setOk] = useState('')
   const [editing, setEditing] = useState(null) // null | 'new' | row
   const [form, setForm] = useState({})
   const [saving, setSaving] = useState(false)
+  const [formLang, setFormLang] = useState('uz')
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -104,17 +123,18 @@ export default function AdminCrudPage({ config }) {
       const { data } = await api.list(params)
       setRows(unwrapList(data))
     } catch (e) {
-      setError(e?.response?.data?.detail || 'Ошибка загрузки')
+      setError(apiError(e, t, 'msg.loadFail'))
       setRows([])
     } finally {
       setLoading(false)
     }
-  }, [api, search])
+  }, [api, search, t])
 
   useEffect(() => { load() }, [load])
 
   const openNew = () => {
     setForm({ ...defaultForm })
+    setFormLang('uz')
     setEditing('new')
   }
 
@@ -124,6 +144,7 @@ export default function AdminCrudPage({ config }) {
       next[f.key] = row[f.key] ?? (f.type === 'checkbox' ? false : '')
     })
     setForm(next)
+    setFormLang('uz')
     setEditing(row)
   }
 
@@ -133,6 +154,7 @@ export default function AdminCrudPage({ config }) {
     e.preventDefault()
     setSaving(true)
     setError('')
+    setOk('')
     try {
       const payload = { ...form }
       // drop empty password on update
@@ -146,26 +168,30 @@ export default function AdminCrudPage({ config }) {
         await api.update(id, payload)
       }
       setEditing(null)
+      setOk(t('msg.saved'))
       await load()
     } catch (err) {
-      const d = err?.response?.data
-      setError(typeof d === 'string' ? d : JSON.stringify(d || err.message))
+      setError(apiError(err, t, 'msg.saveFail'))
     } finally {
       setSaving(false)
     }
   }
 
   const remove = async (row) => {
-    if (!window.confirm('Удалить запись?')) return
+    if (!window.confirm(t('msg.confirmDelete'))) return
     try {
       await api.remove(row[idKey])
+      setOk(t('msg.deleted'))
       await load()
     } catch (err) {
-      setError(err?.response?.data?.detail || 'Ошибка удаления')
+      setError(apiError(err, t, 'msg.deleteFail'))
     }
   }
 
   const visibleCols = useMemo(() => columns, [columns])
+  const i18nFields = fields.filter((f) => f.lang)
+  const otherFields = fields.filter((f) => !f.lang)
+  const shownI18n = i18nFields.filter((f) => f.lang === formLang)
 
   return (
     <div className="admin-page">
@@ -183,30 +209,50 @@ export default function AdminCrudPage({ config }) {
           />
           {!readOnly && (
             <button type="button" className="btn btn-primary" onClick={openNew}>
-              + Добавить
+              + {t('admin.add')}
             </button>
           )}
         </div>
       </header>
 
+      {help && <AdminGuide title={help.title} steps={help.steps} note={help.note} />}
+
       {error && <div className="admin-error">{error}</div>}
+      {ok && <div className="admin-ok">{ok}</div>}
 
       {editing && (
         <div className="admin-modal">
           <form className="admin-modal__card" onSubmit={save}>
             <div className="admin-modal__head">
-              <h3>{editing === 'new' ? 'Новая запись' : 'Редактирование'}</h3>
+              <h3>{editing === 'new' ? t('admin.newRow') : t('admin.editRow')}</h3>
               <button type="button" className="btn btn-ghost btn-sm" onClick={() => setEditing(null)}>✕</button>
             </div>
+            {i18nFields.length > 0 && (
+              <div className="i18n-tabs">
+                {['uz', 'ru', 'en'].map((l) => (
+                  <button
+                    key={l}
+                    type="button"
+                    className={formLang === l ? 'is-on' : ''}
+                    onClick={() => setFormLang(l)}
+                  >
+                    {l.toUpperCase()}
+                  </button>
+                ))}
+              </div>
+            )}
             <div className="admin-form-grid">
-              {fields.map((f) => (
+              {shownI18n.map((f) => (
+                <FieldInput key={f.key} field={f} value={form[f.key]} onChange={setField} />
+              ))}
+              {otherFields.map((f) => (
                 <FieldInput key={f.key} field={f} value={form[f.key]} onChange={setField} />
               ))}
             </div>
             <div className="admin-modal__foot">
-              <button type="button" className="btn btn-ghost" onClick={() => setEditing(null)}>Отмена</button>
+              <button type="button" className="btn btn-ghost" onClick={() => setEditing(null)}>{t('common.cancel')}</button>
               <button type="submit" className="btn btn-primary" disabled={saving}>
-                {saving ? 'Сохранение...' : 'Сохранить'}
+                {saving ? t('common.loading') : t('common.save')}
               </button>
             </div>
           </form>
@@ -215,7 +261,7 @@ export default function AdminCrudPage({ config }) {
 
       <div className="admin-table-wrap">
         {loading ? (
-          <p className="muted" style={{ padding: '2rem', textAlign: 'center' }}>Загрузка...</p>
+          <PageLoader compact />
         ) : (
           <table className="admin-table">
             <thead>

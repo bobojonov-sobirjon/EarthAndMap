@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
-const INTRO_MS = 7200
-const STORAGE_KEY = 'buxoro-gis-intro'
+/** Intro davomiyligi (ms) — CSS animatsiya bilan mos */
+export const INTRO_MS = 7200
 
 const LAYERS = [
   { name: "Yo'llar", color: '#f97316' },
@@ -10,26 +10,17 @@ const LAYERS = [
   { name: 'Qabristonlar', color: '#94a3b8' },
 ]
 
-export function shouldShowIntro() {
-  if (typeof window === 'undefined') return false
-  if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return false
-  const params = new URLSearchParams(window.location.search)
-  const introParam = params.get('intro')
-  if (introParam === '1') return true
-  if (introParam === '-1' || introParam === '0') return false
-  try {
-    return localStorage.getItem(STORAGE_KEY) !== '1'
-  } catch {
-    return true
-  }
+function introQuery() {
+  if (typeof window === 'undefined') return null
+  return new URLSearchParams(window.location.search).get('intro')
 }
 
-export function markIntroSeen() {
-  try {
-    localStorage.setItem(STORAGE_KEY, '1')
-  } catch {
-    /* ignore */
-  }
+/** Har sahifa yangilanganda (F5 / Ctrl+Shift+R) ko‘rsatiladi. ?intro=0 — o‘tkazish. */
+export function shouldShowIntro() {
+  if (typeof window === 'undefined') return false
+  const q = introQuery()
+  if (q === '0' || q === '-1') return false
+  return true
 }
 
 export default function IntroSplash({ onDone }) {
@@ -40,16 +31,12 @@ export default function IntroSplash({ onDone }) {
     if (doneRef.current) return
     doneRef.current = true
     setLeaving(true)
-    markIntroSeen()
     window.setTimeout(() => onDone?.(), 680)
   }, [onDone])
 
   useEffect(() => {
-    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
-      finish()
-      return undefined
-    }
-    const t = window.setTimeout(finish, INTRO_MS)
+    const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+    const t = window.setTimeout(finish, reduced ? 400 : INTRO_MS)
     const onKey = (e) => {
       if (e.key === 'Escape' || e.key === 'Enter' || e.key === ' ') {
         e.preventDefault()

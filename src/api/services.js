@@ -3,6 +3,7 @@ import client from './client'
 export const authApi = {
   login: (username, password) =>
     client.post('/auth/login/', { username, password }),
+  register: (payload) => client.post('/auth/register/', payload),
   me: () => client.get('/auth/me/'),
 }
 
@@ -22,6 +23,11 @@ export const landsApi = {
   delete: (id) => client.delete(`/lands/${id}/`),
   history: (id) => client.get(`/lands/${id}/history/`),
   versions: (id) => client.get(`/lands/${id}/versions/`),
+  parseGeometry: (file) => {
+    const fd = new FormData()
+    fd.append('file', file)
+    return client.post('/lands/parse_geometry/', fd, { timeout: 120000 })
+  },
 }
 
 export const categoriesApi = {

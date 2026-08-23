@@ -8,17 +8,24 @@ import {
   IconPlus,
   IconPrint,
   IconRefresh,
+  IconRoute,
   IconRuler,
 } from './MapIcons'
+import { useI18n } from '../i18n/I18nContext'
 
-export default function MapControls({ map, onRefresh, refreshing = false, onCoordsChange }) {
+export default function MapControls({ map, onRefresh, refreshing = false, onCoordsChange, onUserLocation, onNearest, nearestOpen = false }) {
+  const { t } = useI18n()
   const [locating, setLocating] = useState(false)
   const [measureOn, setMeasureOn] = useState(false)
   const [coordMode, setCoordMode] = useState(false)
   const [measureLabel, setMeasureLabel] = useState('')
   const measureRef = useRef({ points: [], line: null, markers: [] })
 
-  const zoomIn = useCallback(() => map?.zoomIn(), [map])
+  const zoomIn = useCallback(() => {
+    if (!map) return
+    const next = Math.min((map.getZoom() || 0) + 1, 16)
+    map.setZoom(next)
+  }, [map])
   const zoomOut = useCallback(() => map?.zoomOut(), [map])
 
   const goHome = useCallback(() => {
@@ -47,12 +54,13 @@ export default function MapControls({ map, onRefresh, refreshing = false, onCoor
         const { latitude, longitude } = pos.coords
         map.flyTo([latitude, longitude], Math.max(map.getZoom(), 15), { duration: 1.2 })
         onCoordsChange?.(`${latitude.toFixed(4)}° N, ${longitude.toFixed(4)}° E`)
+        onUserLocation?.({ lat: latitude, lng: longitude })
         setLocating(false)
       },
       () => { goHome(); setLocating(false) },
       { enableHighAccuracy: true, timeout: 8000 },
     )
-  }, [map, goHome, onCoordsChange])
+  }, [map, goHome, onCoordsChange, onUserLocation])
 
   const printMap = useCallback(() => {
     document.body.classList.add('map-printing')
@@ -139,33 +147,44 @@ export default function MapControls({ map, onRefresh, refreshing = false, onCoor
 
   return (
     <>
-      <div className="map-tools-bar" role="group" aria-label="Xarita asboblari">
-        <button type="button" className="map-tools-bar__btn" onClick={goHome} title="Boshlang'ich ko'rinish">
+      <div className="map-tools-bar" role="group" aria-label={t('nav.map')}>
+        <button type="button" className="map-tools-bar__btn" onClick={goHome} title={t('map.home')}>
           <IconHome />
-          <span>Uyga qaytish</span>
+          <span>{t('map.home')}</span>
         </button>
         <button
           type="button"
           className={`map-tools-bar__btn ${measureOn ? 'is-active' : ''}`}
           onClick={() => setMeasureOn((v) => !v)}
-          title="Masofa o'lchash"
+          title={t('map.measure')}
         >
           <IconRuler />
-          <span>O&apos;lchash</span>
+          <span>{t('map.measure')}</span>
         </button>
         <button
           type="button"
           className={`map-tools-bar__btn ${coordMode ? 'is-active' : ''}`}
           onClick={() => setCoordMode((v) => !v)}
-          title="Koordinata ko'rsatish"
+          title={t('map.coords')}
         >
           <IconCrosshair />
-          <span>Koordinata</span>
+          <span>{t('map.coords')}</span>
         </button>
-        <button type="button" className="map-tools-bar__btn" onClick={printMap} title="Chop etish">
+        <button type="button" className="map-tools-bar__btn" onClick={printMap} title={t('map.print')}>
           <IconPrint />
-          <span>Chop etish</span>
+          <span>{t('map.print')}</span>
         </button>
+        {onNearest && (
+          <button
+            type="button"
+            className={`map-tools-bar__btn ${nearestOpen ? 'is-active' : ''}`}
+            onClick={onNearest}
+            title={t('route.title')}
+          >
+            <IconRoute />
+            <span>{t('route.title')}</span>
+          </button>
+        )}
         {measureLabel && <span className="map-measure-badge">{measureLabel}</span>}
       </div>
 

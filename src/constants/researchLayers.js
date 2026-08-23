@@ -10,6 +10,14 @@ export const CATEGORY_DISPLAY_NAMES = {
   qabriston: 'Qabristonlar',
 }
 
+const CATEGORY_I18N = {
+  yollar: { uz: "Avtomobil yo'llari", ru: 'Автомобильные дороги', en: 'Roads' },
+  suv: { uz: "Sug'orish tarmoqlari", ru: 'Оросительные сети', en: 'Irrigation networks' },
+  istirohat: { uz: "Istirohat bog'lari", ru: 'Парки и рекреация', en: 'Parks and recreation' },
+  park: { uz: "Istirohat bog'lari", ru: 'Парки и рекреация', en: 'Parks and recreation' },
+  qabriston: { uz: 'Qabristonlar', ru: 'Кладбища', en: 'Cemeteries' },
+}
+
 export const LAYER_GROUPS = [
   { key: 'yollar', codes: ['yollar'], name: "Avtomobil yo'llari", color: '#e67e22' },
   { key: 'suv', codes: ['suv'], name: "Sug'orish tarmoqlari", color: '#3498db' },
@@ -27,10 +35,18 @@ export function isResearchCategory(code) {
   return RESEARCH_CATEGORY_CODES.includes(code)
 }
 
-export function displayCategoryName(catOrCode) {
+export function displayCategoryName(catOrCode, lang = 'uz') {
   if (!catOrCode) return ''
-  if (typeof catOrCode === 'string') return CATEGORY_DISPLAY_NAMES[catOrCode] || catOrCode
-  return CATEGORY_DISPLAY_NAMES[catOrCode.code] || catOrCode.name_uz || catOrCode.name || ''
+  if (typeof catOrCode === 'string') {
+    const row = CATEGORY_I18N[catOrCode] || CATEGORY_I18N[catOrCode === 'park' ? 'istirohat' : catOrCode]
+    return (row && (row[lang] || row.uz)) || CATEGORY_DISPLAY_NAMES[catOrCode] || catOrCode
+  }
+  const uz = catOrCode.name_uz || catOrCode.name
+  const ru = catOrCode.name_ru || catOrCode.category_name_ru
+  const en = catOrCode.name_en || catOrCode.category_name_en
+  if (lang === 'ru') return ru || uz || en || displayCategoryName(catOrCode.code, lang)
+  if (lang === 'en') return en || uz || ru || displayCategoryName(catOrCode.code, lang)
+  return uz || ru || en || displayCategoryName(catOrCode.code, lang)
 }
 
 /** Layer panel uchun 4 ta guruh */
@@ -46,7 +62,12 @@ export function buildLayerGroups(categories = []) {
 export function filterResearchCategories(categories = []) {
   return categories
     .filter((c) => isResearchCategory(c.code))
-    .map((c) => ({ ...c, name_uz: displayCategoryName(c), name_ru: displayCategoryName(c) }))
+    .map((c) => ({
+      ...c,
+      name_uz: displayCategoryName(c, 'uz'),
+      name_ru: displayCategoryName(c, 'ru'),
+      name_en: displayCategoryName(c, 'en'),
+    }))
 }
 
 export function filterResearchCategoryStats(byCategory = []) {

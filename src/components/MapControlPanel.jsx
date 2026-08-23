@@ -1,13 +1,8 @@
-import { buildLayerGroups, displayCategoryName } from '../constants/researchLayers'
+import { buildLayerGroups } from '../constants/researchLayers'
+import { useI18n } from '../i18n/I18nContext'
+import { catName, loc } from '../i18n/loc'
 
-const STATUSES = [
-  { value: '', label: 'Holati' },
-  { value: 'active', label: 'Amalda' },
-  { value: 'construction', label: 'Yangilanmoqda' },
-  { value: 'damaged', label: 'Muammoli' },
-  { value: 'closed', label: 'Yopiq' },
-  { value: 'planned', label: 'Rejalashtirilgan' },
-]
+const STATUSES = ['', 'active', 'construction', 'damaged', 'closed', 'planned']
 
 const LAYER_ICONS = {
   yollar: 'road',
@@ -43,17 +38,18 @@ export default function MapControlPanel({
   onSearch,
   mahallas = [],
 }) {
+  const { t, lang } = useI18n()
   const groups = buildLayerGroups(categories)
   const groupChecked = (g) => g.codes.every((code) => visibleLayers[code] !== false)
 
   return (
     <aside className="map-control-panel">
       <header className="map-control-panel__head">
-        <h2>Interaktiv xarita — Buxoro shahri</h2>
+        <h2>{t('map.title')}</h2>
       </header>
 
       <section className="map-control-section">
-        <h3 className="map-control-section__title">Chegaralar</h3>
+        <h3 className="map-control-section__title">{t('map.borders')}</h3>
         <div className="map-control-list">
           {boundaries.map((b) => (
             <label key={b.code} className="map-control-item">
@@ -64,14 +60,14 @@ export default function MapControlPanel({
               />
               <span className="map-control-check" />
               <span className="layer-color" style={{ background: b.color }} />
-              <span>{b.name}</span>
+              <span>{loc(b, 'name', lang) || b.name}</span>
             </label>
           ))}
         </div>
       </section>
 
       <section className="map-control-section">
-        <h3 className="map-control-section__title">Umumiy foydalanishdagi yer obyektlari</h3>
+        <h3 className="map-control-section__title">{t('map.objects')}</h3>
         <div className="map-control-list">
           {groups.map((g) => (
             <label key={g.key} className="map-control-item">
@@ -85,14 +81,14 @@ export default function MapControlPanel({
               />
               <span className="map-control-check" />
               <LayerIcon type={LAYER_ICONS[g.key]} color={g.color} />
-              <span>{g.name}</span>
+              <span>{t(`layer.${g.key}`)}</span>
             </label>
           ))}
         </div>
       </section>
 
       <section className="map-control-section">
-        <h3 className="map-control-section__title">Qidiruv</h3>
+        <h3 className="map-control-section__title">{t('map.search')}</h3>
         <div className="map-search-wrap">
           <svg className="map-search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
             <circle cx="11" cy="11" r="7" />
@@ -101,7 +97,7 @@ export default function MapControlPanel({
           <input
             type="text"
             className="map-search-input"
-            placeholder="Obyekt nomi bo'yicha qidirish..."
+            placeholder={t('map.searchPh')}
             value={filters.search}
             onChange={(e) => onChange({ ...filters, search: e.target.value })}
             onKeyDown={(e) => e.key === 'Enter' && onSearch()}
@@ -110,13 +106,13 @@ export default function MapControlPanel({
       </section>
 
       <section className="map-control-section">
-        <h3 className="map-control-section__title">Filtr</h3>
+        <h3 className="map-control-section__title">{t('map.filter')}</h3>
         <select
           className="map-select"
           value={filters.mahalla || ''}
           onChange={(e) => onChange({ ...filters, mahalla: e.target.value })}
         >
-          <option value="">MFY</option>
+          <option value="">{t('map.mfy')}</option>
           {mahallas.map((m) => <option key={m} value={m}>{m}</option>)}
         </select>
         <select
@@ -124,9 +120,9 @@ export default function MapControlPanel({
           value={filters.category}
           onChange={(e) => onChange({ ...filters, category: e.target.value })}
         >
-          <option value="">Obyekt turi</option>
+          <option value="">{t('map.type')}</option>
           {categories.map((c) => (
-            <option key={c.id} value={c.id}>{displayCategoryName(c)}</option>
+            <option key={c.id || c.code} value={c.code}>{catName(c, t, lang)}</option>
           ))}
         </select>
         <select
@@ -135,18 +131,18 @@ export default function MapControlPanel({
           onChange={(e) => onChange({ ...filters, status: e.target.value })}
         >
           {STATUSES.map((s) => (
-            <option key={s.value || 'all'} value={s.value}>{s.label}</option>
+            <option key={s || 'all'} value={s}>{s ? t(`status.${s}`) : t('map.status')}</option>
           ))}
         </select>
       </section>
 
       <section className="map-control-section map-control-section--legend">
-        <h3 className="map-control-section__title">Legenda</h3>
+        <h3 className="map-control-section__title">{t('map.legend')}</h3>
         <div className="map-legend-grid">
           {groups.map((g) => (
             <div key={`leg-${g.key}`} className="map-legend-item">
               <LayerIcon type={LAYER_ICONS[g.key]} color={g.color} />
-              <span>{g.name}</span>
+              <span>{t(`layer.${g.key}`)}</span>
             </div>
           ))}
         </div>

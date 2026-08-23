@@ -5,10 +5,12 @@ import { useMapData } from '../hooks/useMapData'
 import { clearLayer, clearLayerGroup } from '../map/layerCleanup'
 import { drawBoundaries, drawFeatureLayers } from '../map/drawLayers'
 import { isResearchCategory, LAYER_GROUPS } from '../constants/researchLayers'
+import { useI18n } from '../i18n/I18nContext'
 
 const CENTER = { lat: 39.773, lng: 64.44, zoom: 12 }
 
 export default function MiniMapPreview() {
+  const { lang, t } = useI18n()
   const mapRef = useRef(null)
   const mapInstance = useRef(null)
   const layersRef = useRef({})
@@ -97,9 +99,10 @@ export default function MiniMapPreview() {
       visibleLayers,
       fitOnceRef: fittedRef,
       fitToBoundary: true,
+      lang,
     })
     return () => clearLayer(map, boundaryRef)
-  }, [boundaries, ready, visibleLayers])
+  }, [boundaries, ready, visibleLayers, lang])
 
   useEffect(() => {
     const map = mapInstance.current
@@ -110,15 +113,16 @@ export default function MiniMapPreview() {
       layersRef,
       collection: geojson,
       visibleLayers,
+      lang,
     })
     return () => clearLayerGroup(map, layersRef)
-  }, [geojson, visibleLayers, ready])
+  }, [geojson, visibleLayers, ready, lang])
 
   return (
     <div className="mini-map-frame">
       <div ref={mapRef} className="mini-map-canvas" />
-      {loading && <div className="mini-map-loading">Xarita yuklanmoqda...</div>}
-      <Link to="/map" className="mini-map-cta">Interaktiv xaritani ochish</Link>
+      {loading && <div className="mini-map-loading">{t('map.loading')}</div>}
+      <Link to="/map" className="mini-map-cta">{t('home.quick.map')}</Link>
     </div>
   )
 }

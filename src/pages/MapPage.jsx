@@ -1,18 +1,39 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import GisMap from '../components/GisMap'
 import LandDetail from '../components/LandDetail'
 import LandForm from '../components/LandForm'
 import MapControlPanel from '../components/MapControlPanel'
+import MapYearBar from '../components/MapYearBar'
+import NearestRoutesPanel from '../components/NearestRoutesPanel'
 import { useAuth } from '../context/AuthContext'
 import { landsApi } from '../api/services'
 import { requestMapRefresh, useMapData } from '../hooks/useMapData'
 import { filterResearchCategories, isResearchCategory } from '../constants/researchLayers'
+import { useI18n } from '../i18n/I18nContext'
+import { apiError } from '../i18n/apiError'
+import client from '../api/client'
 
-export default function MapPage() {
-  const { canEdit } = useAuth()
+function featureMatchesLand(feature, key) {
+  if (!key || !feature) return false
+  const k = String(key).trim().toLowerCase()
+  const vals = [
+    feature.id,
+    feature.properties?.id,
+    feature.properties?.public_id,
+  ]
+  return vals.some((v) => v != null && String(v).trim().toLowerCase() === k)
+}
+
+export default function MapPage({ editable = false }) {
+  const { t } = useI18n()
+  const { canEdit: authCanEdit } = useAuth()
+  const canEdit = Boolean(editable && authCanEdit)
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
+  const [year, setYear] = useState(null)
+  const yearReady = useRef(false)
   const [filters, setFilters] = useState({
     search: '', category: '', status: '', mahalla: '',
   })
@@ -26,6 +47,13 @@ export default function MapPage() {
   const [drawGeometry, setDrawGeometry] = useState(null)
   const [drawType, setDrawType] = useState('Polygon')
   const [mapCoords, setMapCoords] = useState('39.7689° N, 64.4283° E | UTM 40N')
+  const [focusFeature, setFocusFeature] = useState(null)
+  const [userLocation, setUserLocation] = useState(null)
+  const [routes, setRoutes] = useState([])
+  const [locating, setLocating] = useState(false)
+  const [showNearest, setShowNearest] = useState(false)
+
+  const focusKey = (searchParams.get('land') || '').trim()
 
   const {
     boundaries,
@@ -36,7 +64,10 @@ export default function MapPage() {
     error,
     refresh,
   } = useMapData({
-    params: { ...queryParams },
+    params: {
+      ...queryParams,
+      ...(Number.isFinite(Number(year)) && !focusKey ? { year } : {}),
+    },
     pollIntervalMs: 30000,
     enabled: true,
   })
@@ -45,6 +76,20 @@ export default function MapPage() {
     () => filterResearchCategories(config?.categories || []),
     [config],
   )
+
+  const dataYears = config?.years || []
+
+  useEffect(() => {
+    if (!dataYears.length) return
+    const nums = dataYears.map(Number)
+    if (!yearReady.current) {
+      yearReady.current = true
+      setYear(nums[nums.length - 1])
+      return
+    }
+    if (year == null) return
+    if (!nums.includes(Number(year))) setYear(nums[nums.length - 1])
+  }, [dataYears, year])
 
   const mahallas = useMemo(() => {
     const set = new Set()
@@ -91,13 +136,52 @@ export default function MapPage() {
   }, [])
 
   useEffect(() => {
-    const landId = searchParams.get('land')
-    if (!landId || !features?.features?.length) return
-    const found = features.features.find((f) => String(f.properties?.id) === String(landId))
-    if (found) handleSelect(found.properties)
-  }, [searchParams, features, handleSelect])
+    if (focusKey) setYear(null)
+  }, [focusKey])
+
+  useEffect(() => {
+    let alive = true
+    if (!focusKey) {
+      setFocusFeature(null)
+      return undefined
+    }
+
+    const fromSnap = (features?.features || []).find((f) => featureMatchesLand(f, focusKey))
+    if (fromSnap) {
+      setFocusFeature(fromSnap)
+      handleSelect(fromSnap.properties)
+      const code = fromSnap.properties?.category_code
+      if (code) {
+        setVisibleLayers((prev) => {
+          const next = { ...prev }
+          Object.keys(next).forEach((k) => {
+            if (!k.startsWith('boundary:')) next[k] = k === code || (code === 'park' && k === 'istirohat') || (code === 'istirohat' && k === 'park')
+          })
+          next[code] = true
+          return next
+        })
+      }
+      return undefined
+    }
+
+    const loadSolo = async () => {
+      try {
+        const { data } = await client.get(`/lands/${focusKey}/feature/`)
+        if (!alive || !data?.geometry) return
+        setFocusFeature(data)
+        handleSelect(data.properties || data)
+      } catch {
+        if (alive) setFocusFeature(null)
+      }
+    }
+    loadSolo()
+    return () => { alive = false }
+  }, [focusKey, features, handleSelect])
 
   const filteredGeojson = useMemo(() => {
+    if (focusKey && focusFeature?.geometry) {
+      return { type: 'FeatureCollection', features: [focusFeature] }
+    }
     if (!features) return null
     let list = (features.features || []).filter((f) => isResearchCategory(f.properties?.category_code))
     if (filters.search) {
@@ -112,8 +196,15 @@ export default function MapPage() {
     if (filters.mahalla) {
       list = list.filter((f) => (f.properties?.mahalla || '') === filters.mahalla)
     }
+    if (filters.category) {
+      const cat = String(filters.category)
+      list = list.filter((f) =>
+        String(f.properties?.category_code || '') === cat
+        || String(f.properties?.category || '') === cat,
+      )
+    }
     return { ...features, features: list }
-  }, [features, filters.search, filters.mahalla])
+  }, [features, filters.search, filters.mahalla, filters.category, focusKey, focusFeature])
 
   const handleSearch = () => {
     const params = {}
@@ -149,17 +240,31 @@ export default function MapPage() {
 
   const handleSave = async (data) => {
     try {
+      const file = data.shapeFile
+      const payload = { ...data }
+      delete payload.shapeFile
+      if (file) {
+        const parsed = await landsApi.parseGeometry(file)
+        payload.geometry = parsed.data.geometry
+        if (parsed.data.features > 1) {
+          alert(t('form.shpMerged').replace('{n}', String(parsed.data.features)))
+        }
+      }
+      if (!payload.geometry) {
+        alert(t('form.drawGeom'))
+        return
+      }
       if (editLand) {
-        await landsApi.update(editLand.id, data)
+        await landsApi.update(editLand.id, payload)
       } else {
-        await landsApi.create(data)
+        await landsApi.create(payload)
       }
       setShowForm(false)
       setEditLand(null)
       setDrawGeometry(null)
       requestMapRefresh()
     } catch (err) {
-      alert(err.response?.data?.detail || 'Xatolik yuz berdi')
+      alert(apiError(err, t, 'msg.saveFail'))
     }
   }
 
@@ -167,12 +272,31 @@ export default function MapPage() {
     setMapCoords(text)
   }, [])
 
+  const locateUser = useCallback(() => {
+    if (!navigator.geolocation) return
+    setLocating(true)
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setUserLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude })
+        setLocating(false)
+      },
+      () => setLocating(false),
+      { enableHighAccuracy: true, timeout: 8000 },
+    )
+  }, [])
+
+  const handlePickNearest = useCallback((props) => {
+    if (!props) return
+    setSelected(props)
+    setShowForm(false)
+  }, [])
+
   return (
-    <div className="map-page map-page--immersive">
+    <div className={`map-page map-page--immersive${editable ? ' map-page--admin' : ''}`}>
       <div className="map-stage">
         <div className="map-print-header" aria-hidden="true">
-          <strong>Interaktiv xarita — Buxoro shahri</strong>
-          <span>Buxoro GIS · {new Date().toLocaleDateString('uz')}</span>
+          <strong>{t('map.title')}</strong>
+          <span>Buxoro GIS · {new Date().toLocaleDateString()}</span>
         </div>
 
         <GisMap
@@ -191,33 +315,87 @@ export default function MapPage() {
           onRefresh={refresh}
           showEditTools={canEdit}
           onCoordsChange={handleCoordsChange}
+          fitToBoundary={!focusKey}
+          fitToFeatures={Boolean(focusKey || filters.category || filters.status || filters.mahalla || filters.search)}
+          onUserLocation={setUserLocation}
+          userLocation={userLocation}
+          routes={routes}
+          onNearest={() => setShowNearest(true)}
+          nearestOpen={showNearest}
         />
 
-        <MapControlPanel
-          boundaries={(boundaries?.features || []).map((f) => f.properties)}
-          categories={config?.categories || []}
-          visibleLayers={visibleLayers}
-          onToggle={handleToggleLayer}
-          onToggleGroup={handleToggleGroup}
-          filters={filters}
-          onChange={setFilters}
-          onSearch={handleSearch}
-          mahallas={mahallas}
-        />
+        {focusKey && (
+          <div className="map-focus-banner">
+            <span>
+              Только объект <b>{selected?.public_id || focusFeature?.properties?.public_id || focusKey}</b>
+            </span>
+            <button
+              type="button"
+              className="chip"
+              onClick={() => navigate(editable ? '/admin-panel/map' : '/map')}
+            >
+              Показать все
+            </button>
+          </div>
+        )}
+
+        <div className="map-dock map-dock--left">
+          <MapControlPanel
+            boundaries={(boundaries?.features || []).map((f) => f.properties)}
+            categories={config?.categories || []}
+            visibleLayers={visibleLayers}
+            onToggle={handleToggleLayer}
+            onToggleGroup={handleToggleGroup}
+            filters={filters}
+            onChange={setFilters}
+            onSearch={handleSearch}
+            mahallas={mahallas}
+          />
+          <MapYearBar year={year} years={config?.years || []} onChange={setYear} />
+        </div>
+
+        {!showNearest && !selected && (
+          <button
+            type="button"
+            className="map-nearest-fab"
+            onClick={() => setShowNearest(true)}
+          >
+            {t('route.title')}
+          </button>
+        )}
 
         {selected && !showForm && (
-          <LandDetail
-            land={selected}
-            onClose={() => setSelected(null)}
-            canEdit={canEdit}
-            floating
-            onEdit={async (land) => {
-              const { data } = await landsApi.get(land.id)
-              setEditLand(data)
-              setShowForm(true)
-            }}
-            onDetail={(land) => navigate(`/lands?land=${land.id}`)}
-          />
+          <div className="map-dock map-dock--right">
+            <LandDetail
+              land={selected}
+              onClose={() => setSelected(null)}
+              canEdit={canEdit}
+              floating
+              onEdit={async (land) => {
+                const { data } = await landsApi.get(land.id)
+                setEditLand(data)
+                setShowForm(true)
+              }}
+              onDetail={(land) => navigate(editable ? `/admin-panel/lands?land=${land.id}` : `/lands?land=${land.id}`)}
+            />
+          </div>
+        )}
+
+        {showNearest && createPortal(
+          <div className="admin-modal route-modal-overlay" onClick={() => setShowNearest(false)}>
+            <div className="admin-modal__card route-modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
+              <NearestRoutesPanel
+                features={features}
+                userLocation={userLocation}
+                locating={locating}
+                onNeedLocation={locateUser}
+                onRoutes={setRoutes}
+                onClose={() => setShowNearest(false)}
+                onPick={handlePickNearest}
+              />
+            </div>
+          </div>,
+          document.body,
         )}
 
         {showForm && canEdit && (
@@ -234,9 +412,9 @@ export default function MapPage() {
 
         <footer className="map-bottom-bar">
           <div className="map-bottom-bar__left">
-            <span>© {new Date().getFullYear()} Buxoro GIS platformasi</span>
+            <span>© {new Date().getFullYear()} {t('map.copyright')}</span>
             <span className="map-bottom-bar__sep">·</span>
-            <span>Ma&apos;lumot manbalari: Esri, Davlat kadastri, OSM, Sentinel-2</span>
+            <span>{t('map.sources')}</span>
           </div>
           <div className="map-bottom-bar__right">
             <span className="map-scale-hint">0 — 3 km</span>

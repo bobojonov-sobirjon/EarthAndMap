@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { fetchMapSnapshot } from '../api/mapData'
+import { useI18n } from '../i18n/I18nContext'
+import { apiError } from '../i18n/apiError'
 
 const DEFAULT_POLL_MS = 30000
 
@@ -12,6 +14,7 @@ export function useMapData({
   pollIntervalMs = DEFAULT_POLL_MS,
   enabled = true,
 } = {}) {
+  const { t } = useI18n()
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
@@ -44,10 +47,7 @@ export function useMapData({
       return snapshot
     } catch (err) {
       if (controller.signal.aborted) return null
-      const message = err.response?.data?.detail
-        || err.message
-        || 'Xarita ma\'lumotlarini yuklab bo\'lmadi'
-      setError(message)
+      setError(apiError(err, t, 'map.loadFail'))
       return null
     } finally {
       if (!controller.signal.aborted) {
@@ -55,7 +55,7 @@ export function useMapData({
         setRefreshing(false)
       }
     }
-  }, [paramsKey])
+  }, [paramsKey, t])
 
   const refresh = useCallback(() => load({ silent: true, force: true }), [load])
 

@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { adminApi, statsApi } from '../api/services'
+import AdminGuide from './AdminGuide'
+import PageLoader from '../components/PageLoader'
 
 const CARDS = [
   { to: '/admin-panel/users', label: 'Пользователи', key: 'users', color: '#38bdf8' },
@@ -21,6 +23,7 @@ function countOf(data) {
 export default function AdminHome() {
   const [counts, setCounts] = useState({})
   const [kpi, setKpi] = useState(null)
+  const [ready, setReady] = useState(false)
 
   useEffect(() => {
     const load = async () => {
@@ -45,10 +48,14 @@ export default function AdminHome() {
         setKpi(dash.data?.kpis || null)
       } catch {
         /* ignore */
+      } finally {
+        setReady(true)
       }
     }
     load()
   }, [])
+
+  if (!ready) return <PageLoader />
 
   return (
     <div className="admin-page">
@@ -85,11 +92,21 @@ export default function AdminHome() {
         <h3>Быстрые действия</h3>
         <div className="admin-quick__row">
           <Link className="btn btn-primary" to="/admin-panel/import">Импорт файлов на карту</Link>
-          <Link className="btn btn-outline" to="/admin-panel/lands">Реестр объектов</Link>
-          <Link className="btn btn-outline" to="/admin-panel/users">Пользователи</Link>
-          <Link className="btn btn-ghost" to="/map">Открыть карту</Link>
+          <Link className="btn btn-ghost" to="/admin-panel/lands">Реестр объектов</Link>
+          <Link className="btn btn-ghost" to="/admin-panel/users">Пользователи</Link>
+          <Link className="btn btn-ghost" to="/admin-panel/map">Интерактивная карта</Link>
         </div>
       </section>
+
+      <AdminGuide
+        title="С чего начать"
+        steps={[
+          'Импорт: ZIP парков 2018 → категория istirohat, год 2018, зелёный цвет.',
+          'В Реестре проверьте колонку «Год» — должно быть 2018.',
+          'На сайте откройте карту и ползунок года.',
+          'Клиент регистрируется на /register как наблюдатель; роль меняется здесь.',
+        ]}
+      />
     </div>
   )
 }

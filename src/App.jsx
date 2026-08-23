@@ -1,10 +1,10 @@
-import { useEffect, useState } from 'react'
-import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
-import IntroSplash, { shouldShowIntro } from './components/IntroSplash'
+import { Navigate, Route, Routes } from 'react-router-dom'
+import { IntroGate } from './components/useIntroGate'
 import Layout from './components/Layout'
 import AdminLayout from './admin/AdminLayout'
 import AdminHome from './admin/AdminHome'
 import AdminImportPage from './admin/AdminImportPage'
+import AdminImportGuidePage from './admin/AdminImportGuidePage'
 import {
   AdminBoundariesPage,
   AdminCategoriesPage,
@@ -24,6 +24,7 @@ import Dashboard from './pages/Dashboard'
 import HomePage from './pages/HomePage'
 import LandsPage from './pages/LandsPage'
 import LoginPage from './pages/LoginPage'
+import RegisterPage from './pages/RegisterPage'
 import MapPage from './pages/MapPage'
 import MonitoringPage from './pages/MonitoringPage'
 import ProblemsPage from './pages/ProblemsPage'
@@ -32,28 +33,17 @@ import { useAuth } from './context/AuthContext'
 
 function App() {
   const { loading } = useAuth()
-  const location = useLocation()
-  const [introOpen, setIntroOpen] = useState(() => shouldShowIntro())
-
-  useEffect(() => {
-    const params = new URLSearchParams(location.search)
-    const p = params.get('intro')
-    if (p === '1') setIntroOpen(true)
-    if (p === '-1' || p === '0') setIntroOpen(false)
-  }, [location.search])
 
   return (
-    <>
-      {introOpen && <IntroSplash onDone={() => setIntroOpen(false)} />}
-      {loading ? (
-        <div className="loading-screen">Yuklanmoqda...</div>
-      ) : (
-        <div className={introOpen ? 'app-behind-intro' : 'app-enter'}>
-          <Routes>
+    <IntroGate loading={loading}>
+      <Routes>
             <Route path="/login" element={<LoginPage />} />
+            <Route path="/register" element={<RegisterPage />} />
             <Route path="/admin-panel" element={<AdminLayout />}>
               <Route index element={<AdminHome />} />
+              <Route path="map" element={<MapPage editable />} />
               <Route path="import" element={<AdminImportPage />} />
+              <Route path="import-guide" element={<AdminImportGuidePage />} />
               <Route path="users" element={<AdminUsersPage />} />
               <Route path="categories" element={<AdminCategoriesPage />} />
               <Route path="lands" element={<AdminLandsPage />} />
@@ -78,10 +68,8 @@ function App() {
               <Route path="problems" element={<ProblemsPage />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Route>
-          </Routes>
-        </div>
-      )}
-    </>
+      </Routes>
+    </IntroGate>
   )
 }
 

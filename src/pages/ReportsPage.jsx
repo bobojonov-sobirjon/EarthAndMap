@@ -1,14 +1,16 @@
 import { useState } from 'react'
 import { statsApi } from '../api/services'
 import { useAuth } from '../context/AuthContext'
+import { useI18n } from '../i18n/I18nContext'
 
 export default function ReportsPage() {
+  const { t } = useI18n()
   const { user } = useAuth()
   const [loading, setLoading] = useState(false)
 
   const handleExport = async () => {
     if (!user) {
-      alert('Hisobot yuklab olish uchun tizimga kiring')
+      alert(t('reports.needLogin'))
       return
     }
     setLoading(true)
@@ -21,7 +23,7 @@ export default function ReportsPage() {
       a.click()
       window.URL.revokeObjectURL(url)
     } catch {
-      alert('Eksport xatosi — avval tizimga kiring')
+      alert(t('reports.exportFail'))
     } finally {
       setLoading(false)
     }
@@ -29,21 +31,14 @@ export default function ReportsPage() {
 
   return (
     <div className="reports-page">
-      <h2>Hisobotlar</h2>
+      <h2>{t('nav.stats')}</h2>
       <div className="report-cards">
         <div className="report-card">
-          <h3>Excel hisobot</h3>
-          <p>Barcha umumfoydalanishdagi yerlar ro'yxatini Excel formatida yuklab oling.</p>
+          <h3>Excel</h3>
+          <p>{t('lands.exportXls')}</p>
           <button type="button" className="btn btn-primary" onClick={handleExport} disabled={loading}>
-            {loading ? 'Yuklanmoqda...' : 'Excel yuklab olish'}
+            {loading ? t('common.loading') : t('lands.exportXls')}
           </button>
-        </div>
-        <div className="report-card">
-          <h3>Django Admin</h3>
-          <p>To'liq boshqaruv paneli uchun Django Admin dan foydalaning.</p>
-          <a href="http://127.0.0.1:8009/admin/" target="_blank" rel="noreferrer" className="btn btn-secondary">
-            Admin panelga o'tish →
-          </a>
         </div>
       </div>
     </div>
