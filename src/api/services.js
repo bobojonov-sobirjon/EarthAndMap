@@ -11,6 +11,7 @@ export const mapApi = {
   config: () => client.get('/map-config/'),
   geojson: (params) => client.get('/lands/geojson/', { params }),
   boundary: () => client.get('/boundaries/geojson/'),
+  mahallas: (params) => client.get('/mahallas/', { params }),
 }
 
 export { fetchMapSnapshot, fetchMapBoundaries, fetchMapFeatures, fetchMapConfig } from './mapData'

@@ -21,15 +21,21 @@ export async function fetchMapConfig() {
   return data
 }
 
+export async function fetchMapMahallas(params = {}) {
+  const { data } = await client.get('/mahallas/geojson/', { params })
+  return normalizeFeatureCollection(data)
+}
+
 /**
  * Bitta so'rovda barcha xarita ma'lumotlarini olish.
  * Natija fingerprint bilan — pollingda o'zgarishni aniqlash uchun.
  */
 export async function fetchMapSnapshot(params = {}) {
-  const [boundaries, features, config] = await Promise.all([
+  const [boundaries, features, config, mahallas] = await Promise.all([
     fetchMapBoundaries(),
     fetchMapFeatures(params),
     fetchMapConfig(),
+    fetchMapMahallas(),
   ])
 
   const markers = {
@@ -42,11 +48,12 @@ export async function fetchMapSnapshot(params = {}) {
     features: features.features.filter((f) => !isPointGeometry(f.geometry)),
   }
 
-  const fingerprint = buildFingerprint(boundaries, features)
+  const fingerprint = buildFingerprint(boundaries, features, mahallas)
 
   return {
     boundaries,
     features,
+    mahallas,
     markers,
     polygonsAndLines,
     config,
@@ -72,14 +79,16 @@ function normalizeFeatureCollection(data) {
 }
 
 /** O'zgarishni arzon aniqlash (to'liq JSON solishtirmasdan). */
-export function buildFingerprint(boundaries, features) {
+export function buildFingerprint(boundaries, features, mahallas) {
   const bCount = boundaries?.features?.length ?? 0
   const fCount = features?.features?.length ?? 0
+  const mCount = mahallas?.features?.length ?? 0
   const bIds = (boundaries?.features || []).map((f) => f.id ?? f.properties?.id).join(',')
+  const mIds = (mahallas?.features || []).map((f) => f.id ?? f.properties?.id).join(',')
   const sample = (features?.features || [])
     .slice(0, 5)
     .concat((features?.features || []).slice(-5))
     .map((f) => `${f.id ?? f.properties?.id}:${f.properties?.updated_at || ''}`)
     .join('|')
-  return `b${bCount}:${bIds}|f${fCount}:${sample}`
+  return `b${bCount}:${bIds}|f${fCount}:${sample}|m${mCount}:${mIds}`
 }

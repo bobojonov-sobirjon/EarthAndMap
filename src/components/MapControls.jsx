@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import L from 'leaflet'
 import {
   IconCrosshair,
+  IconHeat,
   IconHome,
   IconLocate,
   IconMinus,
@@ -10,16 +11,37 @@ import {
   IconRefresh,
   IconRoute,
   IconRuler,
+  IconSplit,
 } from './MapIcons'
 import { useI18n } from '../i18n/I18nContext'
+import {
+  fmtArea,
+  fmtLength,
+  nearFirstPoint,
+  polygonAreaSqm,
+  polygonPerimeterM,
+  polylineLengthM,
+} from '../map/measureUtils'
 
-export default function MapControls({ map, onRefresh, refreshing = false, onCoordsChange, onUserLocation, onNearest, nearestOpen = false }) {
+export default function MapControls({
+  map,
+  onRefresh,
+  refreshing = false,
+  onCoordsChange,
+  onUserLocation,
+  onNearest,
+  nearestOpen = false,
+  heatmapOn = false,
+  onToggleHeatmap,
+  splitOn = false,
+  onToggleSplit,
+}) {
   const { t } = useI18n()
   const [locating, setLocating] = useState(false)
   const [measureOn, setMeasureOn] = useState(false)
   const [coordMode, setCoordMode] = useState(false)
   const [measureLabel, setMeasureLabel] = useState('')
-  const measureRef = useRef({ points: [], line: null, markers: [] })
+  const measureRef = useRef({ points: [], line: null, polygon: null, markers: [], closed: false })
 
   const zoomIn = useCallback(() => {
     if (!map) return
@@ -36,11 +58,63 @@ export default function MapControls({ map, onRefresh, refreshing = false, onCoor
     const m = measureRef.current
     if (!map) return
     if (m.line) { map.removeLayer(m.line); m.line = null }
+    if (m.polygon) { map.removeLayer(m.polygon); m.polygon = null }
     m.markers.forEach((mk) => map.removeLayer(mk))
     m.markers = []
     m.points = []
+    m.closed = false
     setMeasureLabel('')
   }, [map])
+
+  const updateMeasureLayers = useCallback((m) => {
+    if (!map) return
+    if (m.line) { map.removeLayer(m.line); m.line = null }
+    if (m.polygon) { map.removeLayer(m.polygon); m.polygon = null }
+
+    if (m.closed && m.points.length >= 3) {
+      m.polygon = L.polygon(m.points, {
+        pane: 'measure',
+        color: '#f1c40f',
+        weight: 2,
+        fillColor: '#f1c40f',
+        fillOpacity: 0.22,
+        dashArray: '6 4',
+        interactive: false,
+      }).addTo(map)
+      const perim = polygonPerimeterM(m.points)
+      const area = polygonAreaSqm(m.points)
+      setMeasureLabel(`${t('map.measure.perimeter')}: ${fmtLength(perim)} · ${t('map.measure.area')}: ${fmtArea(area)}`)
+      return
+    }
+
+    if (m.points.length >= 2) {
+      m.line = L.polyline(m.points, {
+        pane: 'measure',
+        color: '#f1c40f',
+        weight: 3,
+        dashArray: '6 4',
+        interactive: false,
+      }).addTo(map)
+    }
+    if (m.points.length >= 3) {
+      m.polygon = L.polygon(m.points, {
+        pane: 'measure',
+        color: '#f1c40f',
+        weight: 2,
+        fillColor: '#f1c40f',
+        fillOpacity: 0.15,
+        dashArray: '6 4',
+        interactive: false,
+      }).addTo(map)
+      const perim = polygonPerimeterM(m.points)
+      const area = polygonAreaSqm(m.points)
+      setMeasureLabel(`${t('map.measure.perimeter')}: ${fmtLength(perim)} · ${t('map.measure.area')}: ${fmtArea(area)}`)
+    } else if (m.points.length === 2) {
+      setMeasureLabel(`${t('map.measure.length')}: ${fmtLength(polylineLengthM(m.points))}`)
+    } else {
+      setMeasureLabel('')
+    }
+  }, [map, t])
 
   const locateMe = useCallback(() => {
     if (!map) return
@@ -66,7 +140,6 @@ export default function MapControls({ map, onRefresh, refreshing = false, onCoor
     document.body.classList.add('map-printing')
     const cleanup = () => document.body.classList.remove('map-printing')
     window.addEventListener('afterprint', cleanup, { once: true })
-    // Ba'zi brauzerlar afterprint bermaydi
     setTimeout(cleanup, 3000)
     window.print()
   }, [])
@@ -85,13 +158,37 @@ export default function MapControls({ map, onRefresh, refreshing = false, onCoor
   useEffect(() => {
     if (!map) return undefined
     if (!coordMode) return undefined
-    const onClick = (e) => {
-      const { lat, lng } = e.latlng
+    const container = map.getContainer()
+    const onClick = (ev) => {
+      const latlng = map.mouseEventToLatLng(ev)
+      if (!latlng) return
+      const { lat, lng } = latlng
       onCoordsChange?.(`${lat.toFixed(4)}° N, ${lng.toFixed(4)}° E | UTM 40N`, true)
     }
-    map.on('click', onClick)
-    return () => map.off('click', onClick)
+    container.addEventListener('click', onClick, true)
+    return () => container.removeEventListener('click', onClick, true)
   }, [map, coordMode, onCoordsChange])
+
+  useEffect(() => {
+    if (measureOn) setCoordMode(false)
+  }, [measureOn])
+
+  useEffect(() => {
+    if (!map) return undefined
+    const container = map.getContainer()
+    const wrap = container.closest('.gis-map-wrap')
+    const lock = measureOn || coordMode
+    wrap?.classList.toggle('is-measuring', lock)
+    container.classList.toggle('is-measuring', lock)
+    if (!map.getPane('measure')) {
+      map.createPane('measure')
+      map.getPane('measure').style.zIndex = 680
+    }
+    return () => {
+      wrap?.classList.remove('is-measuring')
+      container.classList.remove('is-measuring')
+    }
+  }, [map, measureOn, coordMode])
 
   useEffect(() => {
     if (!map) return undefined
@@ -100,33 +197,65 @@ export default function MapControls({ map, onRefresh, refreshing = false, onCoor
       map.getContainer().style.cursor = ''
       return undefined
     }
-    map.getContainer().style.cursor = 'crosshair'
-    const onClick = (e) => {
+    if (coordMode) return undefined
+
+    const container = map.getContainer()
+    container.style.cursor = 'crosshair'
+    map.doubleClickZoom?.disable()
+
+    const addPoint = (latlng) => {
+      if (!latlng) return
       const m = measureRef.current
-      m.points.push(e.latlng)
-      const marker = L.circleMarker(e.latlng, {
-        radius: 5, color: '#fff', fillColor: '#1867D2', fillOpacity: 1,
+      if (m.closed) {
+        clearMeasure()
+        measureRef.current = { points: [], line: null, polygon: null, markers: [], closed: false }
+      }
+      const cur = measureRef.current
+      if (cur.points.length >= 3 && nearFirstPoint(map, cur.points, latlng)) {
+        cur.closed = true
+        updateMeasureLayers(cur)
+        return
+      }
+      cur.points.push(latlng)
+      const marker = L.circleMarker(latlng, {
+        pane: 'measure',
+        radius: cur.points.length === 1 ? 6 : 5,
+        color: '#fff',
+        fillColor: cur.points.length === 1 ? '#22c55e' : '#1867D2',
+        fillOpacity: 1,
+        weight: 2,
+        interactive: false,
       }).addTo(map)
-      m.markers.push(marker)
-      if (m.points.length >= 2) {
-        if (m.line) map.removeLayer(m.line)
-        m.line = L.polyline(m.points, { color: '#f1c40f', weight: 3, dashArray: '6 4' }).addTo(map)
-        let total = 0
-        for (let i = 1; i < m.points.length; i += 1) {
-          total += m.points[i - 1].distanceTo(m.points[i])
-        }
-        setMeasureLabel(total >= 1000 ? `${(total / 1000).toFixed(2)} km` : `${Math.round(total)} m`)
+      cur.markers.push(marker)
+      updateMeasureLayers(cur)
+    }
+
+    const onClick = (ev) => {
+      ev.stopPropagation()
+      addPoint(map.mouseEventToLatLng(ev))
+    }
+    const onDbl = (ev) => {
+      ev.preventDefault()
+      ev.stopPropagation()
+      const m = measureRef.current
+      if (m.points.length >= 3) {
+        m.closed = true
+        updateMeasureLayers(m)
+      } else {
+        setMeasureOn(false)
       }
     }
-    const onDbl = () => setMeasureOn(false)
-    map.on('click', onClick)
-    map.on('dblclick', onDbl)
+
+    container.addEventListener('click', onClick, true)
+    container.addEventListener('dblclick', onDbl, true)
+
     return () => {
-      map.off('click', onClick)
-      map.off('dblclick', onDbl)
-      map.getContainer().style.cursor = ''
+      container.removeEventListener('click', onClick, true)
+      container.removeEventListener('dblclick', onDbl, true)
+      container.style.cursor = ''
+      map.doubleClickZoom?.enable()
     }
-  }, [map, measureOn, clearMeasure])
+  }, [map, measureOn, clearMeasure, updateMeasureLayers, coordMode])
 
   useEffect(() => {
     if (!map) return undefined
@@ -185,14 +314,39 @@ export default function MapControls({ map, onRefresh, refreshing = false, onCoor
             <span>{t('route.title')}</span>
           </button>
         )}
+        {onToggleHeatmap && (
+          <button
+            type="button"
+            className={`map-tools-bar__btn ${heatmapOn ? 'is-active' : ''}`}
+            onClick={onToggleHeatmap}
+            title={t('map.heatmap')}
+          >
+            <IconHeat />
+            <span>{t('map.heatmap')}</span>
+          </button>
+        )}
+        {onToggleSplit && (
+          <button
+            type="button"
+            className={`map-tools-bar__btn ${splitOn ? 'is-active' : ''}`}
+            onClick={onToggleSplit}
+            title={t('map.split.title')}
+          >
+            <IconSplit />
+            <span>{t('map.split.short')}</span>
+          </button>
+        )}
+        {measureOn && !measureLabel && (
+          <span className="map-measure-hint">{t('map.measure.hint')}</span>
+        )}
         {measureLabel && <span className="map-measure-badge">{measureLabel}</span>}
       </div>
 
       <div className="map-controls" role="group" aria-label="Zoom">
-        <button type="button" className="map-ctrl-btn" onClick={zoomIn} title="Yaqinlashtirish" aria-label="Yaqinlashtirish">
+        <button type="button" className="map-ctrl-btn" onClick={zoomIn} title={t('map.zoomIn')} aria-label={t('map.zoomIn')}>
           <IconPlus />
         </button>
-        <button type="button" className="map-ctrl-btn" onClick={zoomOut} title="Uzoqlashtirish" aria-label="Uzoqlashtirish">
+        <button type="button" className="map-ctrl-btn" onClick={zoomOut} title={t('map.zoomOut')} aria-label={t('map.zoomOut')}>
           <IconMinus />
         </button>
         <div className="map-ctrl-divider" />
@@ -200,8 +354,8 @@ export default function MapControls({ map, onRefresh, refreshing = false, onCoor
           type="button"
           className={`map-ctrl-btn ${locating ? 'is-loading' : ''}`}
           onClick={locateMe}
-          title="Mening joylashuvim"
-          aria-label="Mening joylashuvim"
+          title={t('route.locate')}
+          aria-label={t('route.locate')}
         >
           <IconLocate />
         </button>
@@ -212,8 +366,8 @@ export default function MapControls({ map, onRefresh, refreshing = false, onCoor
               type="button"
               className={`map-ctrl-btn ${refreshing ? 'is-loading' : ''}`}
               onClick={onRefresh}
-              title="Yangilash"
-              aria-label="Yangilash"
+              title={t('common.refresh')}
+              aria-label={t('common.refresh')}
               disabled={refreshing}
             >
               <IconRefresh spinning={refreshing} />

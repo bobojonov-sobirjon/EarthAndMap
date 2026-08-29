@@ -4,14 +4,14 @@ import '@geoman-io/leaflet-geoman-free'
 import '@geoman-io/leaflet-geoman-free/dist/leaflet-geoman.css'
 import MapControls from './MapControls'
 import { clearLayer, clearLayerGroup } from '../map/layerCleanup'
-import { drawBoundaries, drawFeatureLayers } from '../map/drawLayers'
+import { drawBoundaries, drawFeatureLayers, drawMahallaLayers } from '../map/drawLayers'
+import { BASEMAPS, MAP_MAX_ZOOM, MAP_MIN_ZOOM } from '../map/basemaps'
+import { applyBasemapLayers } from '../map/applyBasemapLayers'
 import { useI18n } from '../i18n/I18nContext'
 
-const DEFAULT_CENTER = { lat: 39.773, lng: 64.440, zoom: 13 }
-/** Buxoro Esri z=17+ da “Map data not yet available” beradi. */
-const MAP_MAX_ZOOM = 16
-const TILE_NATIVE_ZOOM = 16
-const ROUTE_FIT_MAX_ZOOM = 14
+/** Buxoro shahri markazi */
+const DEFAULT_CENTER = { lat: 39.7747, lng: 64.4286, zoom: 13 }
+const ROUTE_FIT_MAX_ZOOM = 16
 
 const RED_PIN = '#dc2626'
 
@@ -58,6 +58,7 @@ export default function GisMap(props) {
     center = DEFAULT_CENTER,
     geojson,
     boundary,
+    mahallas,
     visibleLayers = {},
     selectedId,
     drawMode = false,
@@ -65,6 +66,7 @@ export default function GisMap(props) {
     onDrawComplete,
     fitToBoundary = true,
     fitToFeatures = false,
+    fitFeaturesKey = '',
     loading = false,
     error = null,
     refreshing = false,
@@ -76,6 +78,10 @@ export default function GisMap(props) {
     routes = [],
     onNearest,
     nearestOpen = false,
+    basemap = 'satellite',
+    onBasemapChange,
+    mfyHighlight = '',
+    heatByName = null,
   } = props
   const onSelect = props.onSelect || props.onSelect || props.onPick
   const { lang, t } = useI18n()
@@ -83,8 +89,13 @@ export default function GisMap(props) {
   const mapInstance = useRef(null)
   const layersRef = useRef({})
   const boundaryRef = useRef(null)
+  const mahallaRef = useRef(null)
   const fittedRef = useRef(false)
+  const featureFitOnceRef = useRef(false)
+  const featureFitKeyRef = useRef('')
+  const mfyFitKeyRef = useRef('')
   const extraRef = useRef(null)
+  const basemapLayersRef = useRef([])
   const drawHandlerRef = useRef(onDrawComplete)
   const [ready, setReady] = useState(false)
 
@@ -97,46 +108,18 @@ export default function GisMap(props) {
     const map = L.map(mapRef.current, {
       zoomControl: false,
       attributionControl: false,
-      minZoom: 10,
+      minZoom: MAP_MIN_ZOOM,
       maxZoom: MAP_MAX_ZOOM,
-      zoomSnap: 0.5,
+      zoomSnap: 0.25,
       zoomDelta: 0.5,
-      wheelPxPerZoomLevel: 120,
+      scrollWheelZoom: true,
+      wheelPxPerZoomLevel: 70,
     }).setView(
       [center?.lat ?? DEFAULT_CENTER.lat, center?.lng ?? DEFAULT_CENTER.lng],
       center?.zoom ?? DEFAULT_CENTER.zoom,
     )
 
-    const tileOpts = {
-      attribution: '',
-      maxZoom: MAP_MAX_ZOOM,
-      maxNativeZoom: TILE_NATIVE_ZOOM,
-    }
-
-    L.tileLayer(
-      'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-      tileOpts,
-    ).addTo(map)
-
-    // Joy nomlari — yuqori pane, aniq kontrast
-    L.tileLayer(
-      'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}',
-      {
-        ...tileOpts,
-        opacity: 1,
-        className: 'map-labels-sharp',
-        zIndex: 450,
-      },
-    ).addTo(map)
-
-    L.tileLayer(
-      'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}',
-      {
-        ...tileOpts,
-        opacity: 0.8,
-        zIndex: 440,
-      },
-    ).addTo(map)
+    basemapLayersRef.current = []
 
     map.createPane('nearest')
     map.getPane('nearest').style.zIndex = 650
@@ -167,11 +150,34 @@ export default function GisMap(props) {
     }
   }, [])
 
+  // —— Pastki qatlam (sputnik / sxema / sxema tungi) ——
+  useEffect(() => {
+    const map = mapInstance.current
+    if (!map || !ready) return undefined
+
+    let cancelled = false
+
+    const run = () => {
+      const def = BASEMAPS[basemap] || BASEMAPS.satellite
+      try {
+        const layers = applyBasemapLayers(map, def, basemapLayersRef.current)
+        if (!cancelled) basemapLayersRef.current = layers
+        else layers.forEach((ly) => { try { map.removeLayer(ly) } catch { /* ignore */ } })
+      } catch (err) {
+        console.warn('Basemap load failed:', err)
+      }
+    }
+
+    run()
+
+    return () => { cancelled = true }
+  }, [basemap, ready])
+
   useEffect(() => {
     const map = mapInstance.current
     if (!map || !ready) return
     map.setMaxZoom(MAP_MAX_ZOOM)
-    map.setMinZoom(10)
+    map.setMinZoom(MAP_MIN_ZOOM)
     if (map.getZoom() > MAP_MAX_ZOOM) map.setZoom(MAP_MAX_ZOOM)
   }, [ready])
 
@@ -195,10 +201,59 @@ export default function GisMap(props) {
     }
   }, [boundary, ready, visibleLayers, fitToBoundary, lang])
 
+  // —— MFY chegaralari ——
+  useEffect(() => {
+    const map = mapInstance.current
+    if (!map || !ready) return
+
+    drawMahallaLayers({
+      map,
+      mahallaRef,
+      collection: mahallas,
+      visible: visibleLayers.mfy_boundaries !== false || visibleLayers.mfy_points !== false || Boolean(heatByName),
+      showAreas: visibleLayers.mfy_boundaries !== false || Boolean(heatByName),
+      showPoints: visibleLayers.mfy_points !== false && !heatByName,
+      lang,
+      highlightName: mfyHighlight,
+      heatByName,
+    })
+
+    const hl = (mfyHighlight || '').trim().toLowerCase()
+    if (hl && hl !== mfyFitKeyRef.current) {
+      mfyFitKeyRef.current = hl
+      const feat = (mahallas?.features || []).find((f) => {
+        if (f.properties?.kind === 'point') return false
+        const name = (f.properties?.name || f.properties?.mahalla || '').toLowerCase()
+        return name === hl
+      })
+      if (feat?.geometry) {
+        try {
+          const bounds = L.geoJSON(feat).getBounds()
+          if (bounds.isValid()) {
+            map.fitBounds(bounds.pad(0.12), { maxZoom: 16, animate: true, duration: 0.6 })
+          }
+        } catch {
+          /* ignore bad geometry */
+        }
+      }
+    } else if (!hl) {
+      mfyFitKeyRef.current = ''
+    }
+
+    return () => {
+      clearLayer(map, mahallaRef)
+    }
+  }, [mahallas, ready, visibleLayers, lang, mfyHighlight, heatByName])
+
   // —— Dinamik obyektlar / markerlar ——
   useEffect(() => {
     const map = mapInstance.current
     if (!map || !ready) return
+
+    if (fitFeaturesKey !== featureFitKeyRef.current) {
+      featureFitKeyRef.current = fitFeaturesKey
+      featureFitOnceRef.current = false
+    }
 
     clearLayerGroup(map, layersRef)
     const nearestIds = (routes || []).map((r) => r.id).filter((id) => id != null)
@@ -212,6 +267,7 @@ export default function GisMap(props) {
       onSelect,
       lang,
       fitToFeatures: nearestMode ? false : fitToFeatures,
+      fitOnceRef: featureFitOnceRef,
       hidePins: nearestMode,
       onlyIds: nearestMode ? new Set(nearestIds) : null,
     })
@@ -219,7 +275,7 @@ export default function GisMap(props) {
     return () => {
       clearLayerGroup(map, layersRef)
     }
-  }, [geojson, visibleLayers, selectedId, ready, onSelect, lang, fitToFeatures, routes])
+  }, [geojson, visibleLayers, selectedId, ready, onSelect, lang, fitToFeatures, fitFeaturesKey, routes])
 
   // —— Draw mode (faqat tahrirlash ruxsati bilan) ——
   useEffect(() => {
@@ -328,6 +384,10 @@ export default function GisMap(props) {
         onUserLocation={onUserLocation}
         onNearest={onNearest}
         nearestOpen={nearestOpen}
+        heatmapOn={props.heatmapOn}
+        onToggleHeatmap={props.onToggleHeatmap}
+        splitOn={props.splitOn}
+        onToggleSplit={props.onToggleSplit}
       />
 
       {loading && (

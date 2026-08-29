@@ -1,16 +1,18 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import GisMap from '../components/GisMap'
 import LandDetail from '../components/LandDetail'
 import LandForm from '../components/LandForm'
-import MapControlPanel from '../components/MapControlPanel'
-import MapYearBar from '../components/MapYearBar'
+import MapToolbar from '../components/MapToolbar'
+import MfyPassportCard from '../components/MfyPassportCard'
 import NearestRoutesPanel from '../components/NearestRoutesPanel'
+import SplitCompareView from '../components/SplitCompareView'
 import { useAuth } from '../context/AuthContext'
-import { landsApi } from '../api/services'
+import { landsApi, mapApi } from '../api/services'
 import { requestMapRefresh, useMapData } from '../hooks/useMapData'
-import { filterResearchCategories, isResearchCategory } from '../constants/researchLayers'
+import { filterResearchCategories, isResearchCategory, ROAD_CLASS_LIST, WATER_CLASS_LIST, PARK_CLASS_LIST, roadLayerKey, waterLayerKey, parkLayerKey, parseTypeFilter, matchesTypeFilter } from '../constants/researchLayers'
+import { buildMfyInsightIndex, mfyPassport } from '../map/mfyInsights'
 import { useI18n } from '../i18n/I18nContext'
 import { apiError } from '../i18n/apiError'
 import client from '../api/client'
@@ -32,12 +34,9 @@ export default function MapPage({ editable = false }) {
   const canEdit = Boolean(editable && authCanEdit)
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
-  const [year, setYear] = useState(null)
-  const yearReady = useRef(false)
   const [filters, setFilters] = useState({
-    search: '', category: '', status: '', mahalla: '',
+    search: '', category: '', mahalla: '', year: '',
   })
-  const [queryParams, setQueryParams] = useState({})
   const [visibleLayers, setVisibleLayers] = useState({})
   const [layersInitialized, setLayersInitialized] = useState(false)
   const [selected, setSelected] = useState(null)
@@ -52,12 +51,20 @@ export default function MapPage({ editable = false }) {
   const [routes, setRoutes] = useState([])
   const [locating, setLocating] = useState(false)
   const [showNearest, setShowNearest] = useState(false)
+  const [basemap, setBasemap] = useState('satellite')
+  const [registryMahallas, setRegistryMahallas] = useState([])
+  const [heatmapOn, setHeatmapOn] = useState(false)
+  const [splitOn, setSplitOn] = useState(false)
+  const [splitYearA, setSplitYearA] = useState(2020)
+  const [splitYearB, setSplitYearB] = useState(2026)
 
   const focusKey = (searchParams.get('land') || '').trim()
+  const insightMode = heatmapOn || splitOn
 
   const {
     boundaries,
     features,
+    mahallas: mahallaBoundaries,
     config,
     loading,
     refreshing,
@@ -65,8 +72,9 @@ export default function MapPage({ editable = false }) {
     refresh,
   } = useMapData({
     params: {
-      ...queryParams,
-      ...(Number.isFinite(Number(year)) && !focusKey ? { year } : {}),
+      ...(!insightMode && filters.year && Number.isFinite(Number(filters.year)) && Number(filters.year) > 0 && !focusKey
+        ? { year: Number(filters.year) }
+        : {}),
     },
     pollIntervalMs: 30000,
     enabled: true,
@@ -77,28 +85,38 @@ export default function MapPage({ editable = false }) {
     [config],
   )
 
-  const dataYears = config?.years || []
+  const mahallas = useMemo(() => {
+    const byName = new Map()
+    registryMahallas.forEach((m) => {
+      if (m?.name) byName.set(m.name, m)
+    })
+    ;(features?.features || []).forEach((f) => {
+      const name = f.properties?.mahalla
+      if (name && !byName.has(name)) byName.set(name, name)
+    })
+    ;(mahallaBoundaries?.features || []).forEach((f) => {
+      if (f.properties?.kind === 'point') return
+      const name = f.properties?.name
+      if (name && !byName.has(name)) byName.set(name, f.properties)
+    })
+    return [...byName.values()].sort((a, b) => {
+      const na = typeof a === 'string' ? a : a.name
+      const nb = typeof b === 'string' ? b : b.name
+      return na.localeCompare(nb, 'uz')
+    })
+  }, [features, registryMahallas, mahallaBoundaries])
 
   useEffect(() => {
-    if (!dataYears.length) return
-    const nums = dataYears.map(Number)
-    if (!yearReady.current) {
-      yearReady.current = true
-      setYear(nums[nums.length - 1])
-      return
-    }
-    if (year == null) return
-    if (!nums.includes(Number(year))) setYear(nums[nums.length - 1])
-  }, [dataYears, year])
-
-  const mahallas = useMemo(() => {
-    const set = new Set()
-    ;(features?.features || []).forEach((f) => {
-      const m = f.properties?.mahalla
-      if (m) set.add(m)
-    })
-    return [...set].sort()
-  }, [features])
+    let alive = true
+    mapApi.mahallas({ is_active: true })
+      .then(({ data }) => {
+        if (!alive) return
+        const rows = data.results || data || []
+        setRegistryMahallas(rows)
+      })
+      .catch(() => { /* reestr bo'lmasa — faqat geojson dan */ })
+    return () => { alive = false }
+  }, [])
 
   useEffect(() => {
     if (!config || layersInitialized) return
@@ -110,6 +128,11 @@ export default function MapPage({ editable = false }) {
       const code = f.properties?.code
       if (code) vis[`boundary:${code}`] = true
     })
+    vis.mfy_boundaries = true
+    vis.mfy_points = false
+    ROAD_CLASS_LIST.forEach((r) => { vis[roadLayerKey(r.id)] = true })
+    WATER_CLASS_LIST.forEach((w) => { vis[waterLayerKey(w.id)] = true })
+    PARK_CLASS_LIST.forEach((p) => { vis[parkLayerKey(p.id)] = true })
     setVisibleLayers(vis)
     setLayersInitialized(true)
   }, [config, boundaries, layersInitialized])
@@ -136,7 +159,7 @@ export default function MapPage({ editable = false }) {
   }, [])
 
   useEffect(() => {
-    if (focusKey) setYear(null)
+    if (focusKey) setFilters((f) => ({ ...f, year: '' }))
   }, [focusKey])
 
   useEffect(() => {
@@ -193,42 +216,106 @@ export default function MapPage({ editable = false }) {
         || f.properties?.public_id?.toLowerCase().includes(q),
       )
     }
+    // MFY: faqat mahalla maydoni to'ldirilgan obyektlarni filtrlash.
+    // Bog'/qabristonda mahalla bo'sh — ular qatlam orqali ko'rinadi.
     if (filters.mahalla) {
-      list = list.filter((f) => (f.properties?.mahalla || '') === filters.mahalla)
+      const want = filters.mahalla.toLowerCase()
+      list = list.filter((f) => {
+        const m = (f.properties?.mahalla || '').trim()
+        if (!m) return true
+        return m.toLowerCase() === want
+      })
     }
+    // Yo'l / istirohat pastki turi: boshqa qatlamlar yashirilmasin.
     if (filters.category) {
-      const cat = String(filters.category)
-      list = list.filter((f) =>
-        String(f.properties?.category_code || '') === cat
-        || String(f.properties?.category || '') === cat,
-      )
+      const { category, road_class } = parseTypeFilter(filters.category)
+      if (category === 'yollar') {
+        list = list.filter((f) => {
+          if (f.properties?.category_code !== 'yollar') return true
+          if (!road_class) return true
+          return (f.properties?.road_class || '') === road_class
+        })
+      } else if (category === 'istirohat' || category === 'park') {
+        list = list.filter((f) => {
+          const code = f.properties?.category_code
+          const isPark = code === 'istirohat' || code === 'park'
+          if (!isPark) return true
+          if (!road_class) return true
+          return (f.properties?.road_class || '') === road_class
+        })
+      } else {
+        list = list.filter((f) => matchesTypeFilter(f, filters.category))
+      }
     }
     return { ...features, features: list }
-  }, [features, filters.search, filters.mahalla, filters.category, focusKey, focusFeature])
+  }, [features, filters.search, filters.mahalla, filters.category, filters.year, focusKey, focusFeature])
 
-  const handleSearch = () => {
-    const params = {}
-    if (filters.category) params.category = filters.category
-    if (filters.status) params.status = filters.status
-    setQueryParams(params)
-  }
+  const mfyInsights = useMemo(
+    () => buildMfyInsightIndex(features?.features || [], mahallaBoundaries),
+    [features, mahallaBoundaries],
+  )
 
-  useEffect(() => {
-    const params = {}
-    if (filters.category) params.category = filters.category
-    if (filters.status) params.status = filters.status
-    setQueryParams(params)
-  }, [filters.category, filters.status])
+  const heatByName = useMemo(() => {
+    if (!heatmapOn) return null
+    const map = {}
+    mfyInsights.rows.forEach((r) => {
+      // Zichlik: maydon birligiga obyekt (kam = past, ko'p = yuqori)
+      map[r.name.toLowerCase()] = r.heat
+    })
+    return map
+  }, [heatmapOn, mfyInsights])
+
+  const passport = useMemo(
+    () => (filters.mahalla ? mfyPassport(mfyInsights, filters.mahalla) : null),
+    [filters.mahalla, mfyInsights],
+  )
 
   const handleToggleLayer = (code) => {
-    setVisibleLayers((prev) => ({ ...prev, [code]: !prev[code] }))
+    setVisibleLayers((prev) => {
+      const currentlyVisible = prev[code] !== false
+      const nextVisible = !currentlyVisible
+      const next = { ...prev, [code]: nextVisible }
+      if (code === 'yollar') {
+        ROAD_CLASS_LIST.forEach((r) => { next[roadLayerKey(r.id)] = nextVisible })
+      }
+      if (code === 'suv') {
+        WATER_CLASS_LIST.forEach((w) => { next[waterLayerKey(w.id)] = nextVisible })
+      }
+      if (code === 'istirohat' || code === 'park') {
+        PARK_CLASS_LIST.forEach((p) => { next[parkLayerKey(p.id)] = nextVisible })
+        next.istirohat = nextVisible
+        next.park = nextVisible
+      }
+      if (nextVisible && String(code).startsWith('water:')) {
+        next.suv = true
+      }
+      if (nextVisible && String(code).startsWith('park:')) {
+        next.istirohat = true
+        next.park = true
+      }
+      if (nextVisible && String(code).startsWith('rec:')) {
+        next.istirohat = true
+        next.park = true
+      }
+      return next
+    })
   }
 
   const handleToggleGroup = (codes) => {
     setVisibleLayers((prev) => {
       const currentlyOn = codes.every((c) => prev[c] !== false)
+      const nextOn = !currentlyOn
       const next = { ...prev }
-      codes.forEach((c) => { next[c] = !currentlyOn })
+      codes.forEach((c) => { next[c] = nextOn })
+      if (codes.includes('suv')) {
+        WATER_CLASS_LIST.forEach((w) => { next[waterLayerKey(w.id)] = nextOn })
+      }
+      if (codes.includes('yollar')) {
+        ROAD_CLASS_LIST.forEach((r) => { next[roadLayerKey(r.id)] = nextOn })
+      }
+      if (codes.includes('istirohat') || codes.includes('park')) {
+        PARK_CLASS_LIST.forEach((p) => { next[parkLayerKey(p.id)] = nextOn })
+      }
       return next
     })
   }
@@ -291,6 +378,12 @@ export default function MapPage({ editable = false }) {
     setShowForm(false)
   }, [])
 
+  const fitFeaturesKey = useMemo(() => {
+    if (focusKey) return `land:${focusKey}`
+    const parts = [filters.category, filters.mahalla, filters.search].filter(Boolean)
+    return parts.join('|')
+  }, [focusKey, filters.category, filters.mahalla, filters.search])
+
   return (
     <div className={`map-page map-page--immersive${editable ? ' map-page--admin' : ''}`}>
       <div className="map-stage">
@@ -299,30 +392,78 @@ export default function MapPage({ editable = false }) {
           <span>Buxoro GIS · {new Date().toLocaleDateString()}</span>
         </div>
 
-        <GisMap
-          center={config?.center}
-          geojson={filteredGeojson}
-          boundary={boundaries}
-          visibleLayers={visibleLayers}
-          selectedId={selected?.id}
-          onSelect={handleSelect}
-          drawMode={drawMode}
-          drawType={drawType}
-          onDrawComplete={handleDrawComplete}
-          loading={loading && !features}
-          error={error}
-          refreshing={refreshing}
-          onRefresh={refresh}
-          showEditTools={canEdit}
-          onCoordsChange={handleCoordsChange}
-          fitToBoundary={!focusKey}
-          fitToFeatures={Boolean(focusKey || filters.category || filters.status || filters.mahalla || filters.search)}
-          onUserLocation={setUserLocation}
-          userLocation={userLocation}
-          routes={routes}
-          onNearest={() => setShowNearest(true)}
-          nearestOpen={showNearest}
-        />
+        {!splitOn && (
+          <GisMap
+            center={config?.center}
+            geojson={filteredGeojson}
+            boundary={boundaries}
+            mahallas={mahallaBoundaries}
+            mfyHighlight={filters.mahalla}
+            heatByName={heatByName}
+            visibleLayers={visibleLayers}
+            selectedId={selected?.id}
+            onSelect={handleSelect}
+            drawMode={drawMode}
+            drawType={drawType}
+            onDrawComplete={handleDrawComplete}
+            loading={loading && !features}
+            error={error}
+            refreshing={refreshing}
+            onRefresh={refresh}
+            showEditTools={canEdit}
+            onCoordsChange={handleCoordsChange}
+            fitToBoundary={!focusKey && !filters.mahalla}
+            fitToFeatures={Boolean(fitFeaturesKey)}
+            fitFeaturesKey={fitFeaturesKey}
+            onUserLocation={setUserLocation}
+            userLocation={userLocation}
+            routes={routes}
+            onNearest={() => setShowNearest(true)}
+            nearestOpen={showNearest}
+            basemap={basemap}
+            onBasemapChange={setBasemap}
+            heatmapOn={heatmapOn}
+            onToggleHeatmap={() => {
+              setHeatmapOn((v) => !v)
+              setSplitOn(false)
+            }}
+            splitOn={splitOn}
+            onToggleSplit={() => {
+              setSplitOn((v) => {
+                const next = !v
+                if (next) setHeatmapOn(false)
+                return next
+              })
+            }}
+          />
+        )}
+
+        {splitOn && (
+          <SplitCompareView
+            collection={features}
+            yearA={splitYearA}
+            yearB={splitYearB}
+            onYearA={setSplitYearA}
+            onYearB={setSplitYearB}
+            basemap={basemap}
+            onClose={() => setSplitOn(false)}
+          />
+        )}
+
+        {heatmapOn && !splitOn && (
+          <div className="map-heat-legend" aria-hidden>
+            <span>{t('map.heatmap.low')}</span>
+            <span className="map-heat-legend__bar" />
+            <span>{t('map.heatmap.high')}</span>
+          </div>
+        )}
+
+        {passport && !splitOn && (
+          <MfyPassportCard
+            passport={passport}
+            onClose={() => setFilters((f) => ({ ...f, mahalla: '' }))}
+          />
+        )}
 
         {focusKey && (
           <div className="map-focus-banner">
@@ -339,22 +480,24 @@ export default function MapPage({ editable = false }) {
           </div>
         )}
 
-        <div className="map-dock map-dock--left">
-          <MapControlPanel
-            boundaries={(boundaries?.features || []).map((f) => f.properties)}
-            categories={config?.categories || []}
-            visibleLayers={visibleLayers}
-            onToggle={handleToggleLayer}
-            onToggleGroup={handleToggleGroup}
-            filters={filters}
-            onChange={setFilters}
-            onSearch={handleSearch}
-            mahallas={mahallas}
-          />
-          <MapYearBar year={year} years={config?.years || []} onChange={setYear} />
-        </div>
+        <MapToolbar
+          basemap={basemap}
+          onBasemapChange={setBasemap}
+          boundaries={(boundaries?.features || []).map((f) => f.properties)}
+          categories={config?.categories || []}
+          visibleLayers={visibleLayers}
+          onToggle={handleToggleLayer}
+          onToggleGroup={handleToggleGroup}
+          filters={filters}
+          onFiltersChange={setFilters}
+          onFiltersClear={() => setFilters({ search: '', category: '', mahalla: '', year: '' })}
+          mahallas={mahallas}
+          years={config?.years || []}
+          onOpenNearest={() => setShowNearest(true)}
+          compareHref={editable ? '/admin-panel/compare' : '/compare'}
+        />
 
-        {!showNearest && !selected && (
+        {!showNearest && !selected && !splitOn && (
           <button
             type="button"
             className="map-nearest-fab"
@@ -365,7 +508,7 @@ export default function MapPage({ editable = false }) {
         )}
 
         {selected && !showForm && (
-          <div className="map-dock map-dock--right">
+          <div className="map-dock map-dock--left map-dock--detail">
             <LandDetail
               land={selected}
               onClose={() => setSelected(null)}

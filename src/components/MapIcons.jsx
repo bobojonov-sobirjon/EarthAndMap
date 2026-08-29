@@ -130,3 +130,31 @@ export function IconRefresh({ spinning = false }) {
     </svg>
   )
 }
+
+export function IconHeat() {
+  return (
+    <Icon>
+      <path d="M12 3c2 3 5 5 5 9a5 5 0 1 1-10 0c0-4 3-6 5-9Z" />
+    </Icon>
+  )
+}
+
+export function IconSplit() {
+  return (
+    <Icon>
+      <rect x="3" y="4" width="8" height="16" rx="1.5" />
+      <rect x="13" y="4" width="8" height="16" rx="1.5" />
+    </Icon>
+  )
+}
+
+export function IconTimeline() {
+  return (
+    <Icon>
+      <path d="M4 12h16" />
+      <circle cx="7" cy="12" r="2.2" />
+      <circle cx="12" cy="12" r="2.2" />
+      <circle cx="17" cy="12" r="2.2" />
+    </Icon>
+  )
+}

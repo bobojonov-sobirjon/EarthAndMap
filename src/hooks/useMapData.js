@@ -86,6 +86,7 @@ export function useMapData({
     boundaries: data?.boundaries ?? null,
     features: data?.features ?? null,
     markers: data?.markers ?? null,
+    mahallas: data?.mahallas ?? null,
     config: data?.config ?? null,
     loading,
     refreshing,

@@ -19,6 +19,7 @@
     "@geoman-io/leaflet-geoman-free": "^2.19.3",
     "axios": "^1.17.0",
     "leaflet": "^1.9.4",
+    "leaflet.gridlayer.googlemutant": "^0.16.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
     "react-leaflet": "^5.0.0",

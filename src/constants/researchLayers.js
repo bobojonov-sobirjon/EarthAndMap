@@ -29,6 +29,136 @@ export const ROAD_CLASS_LABELS = {
   magistral: 'I darajali',
   shahar: 'II darajali',
   mahalliy: 'III darajali',
+  piyoda: 'Piyoda va yordamchi',
+}
+
+/** Yo'l darajalari — SHP import nomlariga mos (I/II/III_darajali, piyoda). */
+export const ROAD_CLASS_LIST = [
+  { id: 'magistral', color: '#ef4444', order: 1 },
+  { id: 'shahar', color: '#9333ea', order: 2 },
+  { id: 'mahalliy', color: '#14b8a6', order: 3 },
+  { id: 'piyoda', color: '#94a3b8', order: 4 },
+]
+
+/** Sug'orish: Kanallar / Ariqlar (road_class maydonida). */
+export const WATER_CLASS_LIST = [
+  { id: 'kanal', color: '#2563eb', order: 1 },
+  { id: 'ariq', color: '#22d3ee', order: 2 },
+]
+
+/** Istirohat: SHP fclass (park / xiyobon / square). */
+export const PARK_CLASS_LIST = [
+  { id: 'park', color: '#22c55e', order: 1 },
+  { id: 'xiyobon', color: '#84cc16', order: 2 },
+  { id: 'square', color: '#a3e635', order: 3 },
+]
+
+export function roadClassColor(roadClass, fallback = '#e67e22') {
+  const row = ROAD_CLASS_LIST.find((r) => r.id === roadClass)
+  return row?.color || fallback
+}
+
+export function waterClassColor(waterClass, fallback = '#3498db') {
+  const row = WATER_CLASS_LIST.find((r) => r.id === waterClass)
+  return row?.color || fallback
+}
+
+export function parkClassColor(parkClass, fallback = '#27ae60') {
+  const row = PARK_CLASS_LIST.find((r) => r.id === parkClass)
+  return row?.color || fallback
+}
+
+export function roadLayerKey(roadClass) {
+  return `road:${roadClass || 'unknown'}`
+}
+
+export function waterLayerKey(waterClass) {
+  return `water:${waterClass || 'unknown'}`
+}
+
+export function parkLayerKey(parkClass) {
+  return `rec:${parkClass || 'unknown'}`
+}
+
+export function isYollarFeatureVisible(feature, visibleLayers = {}) {
+  if (visibleLayers.yollar === false) return false
+  const road = feature?.properties?.road_class
+  if (!road) return true
+  return visibleLayers[roadLayerKey(road)] !== false
+}
+
+export function isSuvFeatureVisible(feature, visibleLayers = {}) {
+  if (visibleLayers.suv === false) return false
+  const water = feature?.properties?.road_class
+  if (!water) return true
+  return visibleLayers[waterLayerKey(water)] !== false
+}
+
+export function isIstirohatFeatureVisible(feature, visibleLayers = {}) {
+  const code = feature?.properties?.category_code
+  if (code !== 'istirohat' && code !== 'park') return true
+  if (visibleLayers.istirohat === false && visibleLayers.park === false) return false
+  if (visibleLayers.istirohat === false && code === 'istirohat') return false
+  if (visibleLayers.park === false && code === 'park') return false
+  const park = feature?.properties?.road_class
+  if (!park) return true
+  return visibleLayers[parkLayerKey(park)] !== false
+}
+
+
+/** Obyekt turi filter: `yollar`, `road:magistral`, `istirohat`, `rec:park`, … */
+export function parseTypeFilter(value) {
+  if (!value) return { category: '', road_class: '' }
+  const raw = String(value)
+  if (raw.startsWith('road:')) return { category: 'yollar', road_class: raw.slice(5) }
+  if (raw.startsWith('rec:')) return { category: 'istirohat', road_class: raw.slice(4) }
+  return { category: raw, road_class: '' }
+}
+
+export function matchesTypeFilter(feature, filterValue) {
+  const { category, road_class } = parseTypeFilter(filterValue)
+  if (!category) return true
+  const code = feature?.properties?.category_code
+  const catOk = code === category
+    || (category === 'istirohat' && code === 'park')
+    || (category === 'park' && code === 'istirohat')
+  if (!catOk) return false
+  if ((category === 'yollar' || category === 'istirohat' || category === 'park') && road_class) {
+    return (feature?.properties?.road_class || '') === road_class
+  }
+  return true
+}
+
+const TYPE_FILTER_ORDER = ['yollar', 'istirohat', 'suv', 'qabriston']
+
+export function buildTypeFilterOptions(categories, { t, lang, catName }) {
+  const opts = [{ value: '', label: t('map.type') }]
+  const seen = new Set()
+  TYPE_FILTER_ORDER.forEach((code) => {
+    const c = categories.find((x) => x.code === code || (code === 'istirohat' && x.code === 'park'))
+    if (!c) return
+    const key = c.code === 'park' ? 'istirohat' : c.code
+    if (seen.has(key)) return
+    seen.add(key)
+    if (key === 'yollar') {
+      opts.push({
+        value: 'yollar',
+        label: catName(c, t, lang),
+        isRoads: true,
+      })
+      return
+    }
+    if (key === 'istirohat') {
+      opts.push({
+        value: 'istirohat',
+        label: catName(c, t, lang),
+        isParks: true,
+      })
+      return
+    }
+    opts.push({ value: key, label: catName(c, t, lang) })
+  })
+  return opts
 }
 
 export function isResearchCategory(code) {

@@ -39,9 +39,7 @@ export default function Layout() {
     { to: '/map', label: t('nav.map'), icon: '🗺️' },
     { to: '/lands', label: t('nav.lands'), icon: '📋' },
     { to: '/dashboard', label: t('nav.stats'), icon: '📊' },
-    { to: '/monitoring', label: t('nav.monitoring'), icon: '📡' },
     { to: '/urbanization', label: t('nav.urban'), icon: '🏙️' },
-    { to: '/compare', label: t('nav.compare'), icon: '⚖️' },
     { to: '/problems', label: t('nav.problems'), icon: '⚠️' },
   ]
 

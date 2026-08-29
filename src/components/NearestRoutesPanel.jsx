@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { LAYER_GROUPS } from '../constants/researchLayers'
 import { useI18n } from '../i18n/I18nContext'
 import { loc } from '../i18n/loc'
+import PrettySelect from './PrettySelect'
 import {
   TRAVEL_MODES,
   featureLatLng,
@@ -82,6 +83,14 @@ export default function NearestRoutesPanel(props) {
   const [busy, setBusy] = useState(false)
   const [address, setAddress] = useState('')
   const [error, setError] = useState('')
+
+  const categoryOptions = useMemo(
+    () => LAYER_GROUPS.map((g) => ({
+      value: g.key,
+      label: t(`layer.${g.key === 'qabriston' ? 'qabriston' : g.key === 'park' ? 'istirohat' : g.key}`),
+    })),
+    [t],
+  )
 
   useEffect(() => {
     let cancelled = false
@@ -190,14 +199,21 @@ export default function NearestRoutesPanel(props) {
       </div>
 
       <label className="route-panel__cat">
-        {t('route.category')}
-        <select value={category} onChange={(e) => { setFocus(0); setCategory(e.target.value) }}>
-          {LAYER_GROUPS.map((g) => (
-            <option key={g.key} value={g.key}>
-              {t(`layer.${g.key === 'qabriston' ? 'qabriston' : g.key === 'park' ? 'istirohat' : g.key}`)}
-            </option>
-          ))}
-        </select>
+        <span className="route-panel__cat-lab">{t('route.category')}</span>
+        <PrettySelect
+          variant="dark"
+          className="route-panel__select"
+          value={category}
+          onChange={(v) => {
+            setFocus(0)
+            setCategory(v || 'qabriston')
+          }}
+          options={categoryOptions}
+          placeholder={t('route.category')}
+          isSearchable={false}
+          menuPlacement="auto"
+          noOptionsMessage={t('map.selectEmpty')}
+        />
       </label>
 
       {userLocation ? (

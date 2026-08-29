@@ -177,11 +177,16 @@ export function AdminLandsPage() {
             { value: 'normal', label: 'Нормальное' },
             { value: 'bad', label: 'Плохое' },
           ]},
-          { key: 'road_class', label: 'Класс дороги', type: 'select', options: [
+          { key: 'road_class', label: 'Класс / тип', type: 'select', options: [
             { value: 'magistral', label: 'Магистраль' },
             { value: 'shahar', label: 'Городская' },
             { value: 'mahalliy', label: 'Местная' },
             { value: 'piyoda', label: 'Пешеходная' },
+            { value: 'kanal', label: 'Канал' },
+            { value: 'ariq', label: 'Арык' },
+            { value: 'park', label: 'Парк (fclass)' },
+            { value: 'xiyobon', label: 'Хиёбон' },
+            { value: 'square', label: 'Майдон / square' },
           ]},
           { key: 'address', label: 'Адрес (UZ)', lang: 'uz' },
           { key: 'address_ru', label: 'Адрес (RU)', lang: 'ru' },
