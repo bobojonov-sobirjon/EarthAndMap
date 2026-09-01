@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { authApi } from '../api/services'
 import { useAuth } from '../context/AuthContext'
+import PasswordInput from '../components/PasswordInput'
 import AuthShell from '../components/AuthShell'
 import PrettySelect from '../components/PrettySelect'
 import { REGION_OPTIONS, districtsOf } from '../constants/uzbekistanRegions'
@@ -149,9 +150,8 @@ export default function RegisterPage() {
         {step === 1 && (
           <div className="auth-form--grid auth-span-2" key="s1">
             <Field label={t('auth.password')} required>
-              <input
+              <PasswordInput
                 required
-                type="password"
                 placeholder="Kamida 6 belgi"
                 autoComplete="new-password"
                 className={shortPwd ? 'is-bad' : ''}
@@ -160,9 +160,8 @@ export default function RegisterPage() {
               />
             </Field>
             <Field label={t('reg.confirm')} required>
-              <input
+              <PasswordInput
                 required
-                type="password"
                 placeholder="Qayta kiriting"
                 autoComplete="new-password"
                 className={mismatch ? 'is-bad' : ''}

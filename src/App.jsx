@@ -5,7 +5,10 @@ import AdminLayout from './admin/AdminLayout'
 import AdminHome from './admin/AdminHome'
 import AdminImportPage from './admin/AdminImportPage'
 import AdminImportGuidePage from './admin/AdminImportGuidePage'
+import AdminUrbanizationMapsPage from './admin/AdminUrbanizationMapsPage'
 import {
+  AdminApplicationSitesPage,
+  AdminApplicationTypesPage,
   AdminBoundariesPage,
   AdminCategoriesPage,
   AdminChangesPage,
@@ -14,7 +17,6 @@ import {
   AdminMahallasPage,
   AdminNoticesPage,
   AdminRecordsPage,
-  AdminUrbanizationPage,
   AdminUsersPage,
   AdminVersionsPage,
   AdminYearsPage,
@@ -52,8 +54,10 @@ function App() {
               <Route path="years" element={<AdminYearsPage />} />
               <Route path="versions" element={<AdminVersionsPage />} />
               <Route path="records" element={<AdminRecordsPage />} />
-              <Route path="urbanization" element={<AdminUrbanizationPage />} />
+              <Route path="urbanization" element={<AdminUrbanizationMapsPage />} />
               <Route path="issues" element={<AdminIssuesPage />} />
+              <Route path="application-types" element={<AdminApplicationTypesPage />} />
+              <Route path="application-sites" element={<AdminApplicationSitesPage />} />
               <Route path="changes" element={<AdminChangesPage />} />
               <Route path="notices" element={<AdminNoticesPage />} />
             </Route>

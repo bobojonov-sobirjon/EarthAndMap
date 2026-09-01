@@ -32,7 +32,7 @@ export async function fetchMapMahallas(params = {}) {
  */
 export async function fetchMapSnapshot(params = {}) {
   const [boundaries, features, config, mahallas] = await Promise.all([
-    fetchMapBoundaries(),
+    fetchMapBoundaries(params),
     fetchMapFeatures(params),
     fetchMapConfig(),
     fetchMapMahallas(),
@@ -83,7 +83,9 @@ export function buildFingerprint(boundaries, features, mahallas) {
   const bCount = boundaries?.features?.length ?? 0
   const fCount = features?.features?.length ?? 0
   const mCount = mahallas?.features?.length ?? 0
-  const bIds = (boundaries?.features || []).map((f) => f.id ?? f.properties?.id).join(',')
+  const bIds = (boundaries?.features || [])
+    .map((f) => `${f.id ?? f.properties?.id}:${f.properties?.monitoring_year || ''}`)
+    .join(',')
   const mIds = (mahallas?.features || []).map((f) => f.id ?? f.properties?.id).join(',')
   const sample = (features?.features || [])
     .slice(0, 5)

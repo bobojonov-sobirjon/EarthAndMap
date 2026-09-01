@@ -65,6 +65,7 @@ export default function GisMap(props) {
     drawType = 'Polygon',
     onDrawComplete,
     fitToBoundary = true,
+    boundaryFitKey = '',
     fitToFeatures = false,
     fitFeaturesKey = '',
     loading = false,
@@ -91,6 +92,7 @@ export default function GisMap(props) {
   const boundaryRef = useRef(null)
   const mahallaRef = useRef(null)
   const fittedRef = useRef(false)
+  const boundaryFitKeyRef = useRef(boundaryFitKey)
   const featureFitOnceRef = useRef(false)
   const featureFitKeyRef = useRef('')
   const mfyFitKeyRef = useRef('')
@@ -182,6 +184,13 @@ export default function GisMap(props) {
   }, [ready])
 
   // —— Dinamik chegaralar ——
+  useEffect(() => {
+    if (boundaryFitKeyRef.current !== boundaryFitKey) {
+      fittedRef.current = false
+      boundaryFitKeyRef.current = boundaryFitKey
+    }
+  }, [boundaryFitKey])
+
   useEffect(() => {
     const map = mapInstance.current
     if (!map || !ready) return

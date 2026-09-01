@@ -72,7 +72,7 @@ function FieldInput({ field, value, onChange }) {
         <PrettySelect
           placeholder="—"
           value={value ?? ''}
-      onChange={(v) => onChange(field.key, field.key === 'monitoring_year' ? Number(v) : v)}
+      onChange={(v) => onChange(field.key, (field.key === 'monitoring_year' || field.key === 'application_type') ? Number(v) : v)}
           options={field.options || []}
         />
       </label>

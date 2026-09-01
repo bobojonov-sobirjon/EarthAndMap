@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
+import PasswordInput from '../components/PasswordInput'
 import AuthShell from '../components/AuthShell'
 import { useI18n } from '../i18n/I18nContext'
 
@@ -45,7 +46,12 @@ export default function LoginPage() {
           <input required autoComplete="username" value={username} onChange={(e) => setUsername(e.target.value)} />
         </label>
         <label>{t('auth.password')}
-          <input required type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} />
+          <PasswordInput
+            required
+            autoComplete="current-password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+          />
         </label>
         <button type="submit" className="btn btn-primary btn-block auth-submit" disabled={loading}>
           {loading ? t('auth.checking') : t('auth.submit')}

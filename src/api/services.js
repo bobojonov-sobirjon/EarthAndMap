@@ -40,6 +40,7 @@ export const statsApi = {
   dashboard: (params) => client.get('/dashboard/', { params }),
   compare: (params) => client.get('/compare/', { params }),
   urbanization: (params) => client.get('/urbanization/', { params }),
+  urbanizationGeojson: (params) => client.get('/urbanization/geojson/', { params }),
   exportExcel: (params) =>
     client.get('/export/excel/', { params, responseType: 'blob' }),
 }
@@ -50,6 +51,11 @@ export const monitoringApi = {
   updateIssue: (id, data) => client.patch(`/monitoring/issues/${id}/`, data),
   deleteIssue: (id) => client.delete(`/monitoring/issues/${id}/`),
   changes: (params) => client.get('/monitoring/changes/', { params }),
+  applicationTypes: () => client.get('/monitoring/application-types/'),
+  analyzeProblem: (data) => client.post('/monitoring/problem-analysis/', data),
+  submissions: (params) => client.get('/monitoring/application-submissions/', { params }),
+  createSubmission: (data) => client.post('/monitoring/application-submissions/', data),
+  patchSubmission: (id, data) => client.patch(`/monitoring/application-submissions/${id}/`, data),
   years: (params) => client.get('/monitoring-years/', { params }),
   records: (params) => client.get('/monitoring-records/', { params }),
 }
@@ -78,6 +84,8 @@ export const adminApi = {
   records: crud('/monitoring-records'),
   urbanization: crud('/urbanization-layers'),
   issues: crud('/monitoring/issues'),
+  applicationTypes: crud('/monitoring/admin/application-types'),
+  applicationSites: crud('/monitoring/admin/application-sites'),
   changes: {
     list: (params) => client.get('/monitoring/changes/', { params }),
     get: (id) => client.get(`/monitoring/changes/${id}/`),

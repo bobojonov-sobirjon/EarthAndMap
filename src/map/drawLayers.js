@@ -44,6 +44,23 @@ function featureCenter(feature) {
   return null
 }
 
+function pinCenterKey(center) {
+  return `${center.lat.toFixed(5)},${center.lng.toFixed(5)}`
+}
+
+function groupPinFeatures(features) {
+  const groups = new Map()
+  features.forEach((f) => {
+    if (!isPolyGeom(f.geometry?.type) && f.geometry?.type !== 'Point') return
+    const center = featureCenter(f)
+    if (!center) return
+    const key = pinCenterKey(center)
+    if (!groups.has(key)) groups.set(key, { center, items: [] })
+    groups.get(key).items.push(f)
+  })
+  return groups
+}
+
 function isLineGeom(type) {
   return type === 'LineString' || type === 'MultiLineString'
 }
@@ -578,9 +595,16 @@ export function drawFeatureLayers({
   Object.entries(byCategory).forEach(([code, features]) => {
     const color = features[0]?.properties?.category_color || '#3388ff'
     const group = L.featureGroup()
+    const lineLayer = code === 'yollar' || code === 'suv' || features.every((f) => isLineGeom(f.geometry?.type))
+    const pinThese = !hidePins && !lineLayer && (
+      features.length <= 120 || features.some((f) => isPolyGeom(f.geometry?.type) || f.geometry?.type === 'Point')
+    )
     const drawn = features.map((f) => asDrawnFeature(f, code))
+    const geoFeatures = pinThese
+      ? drawn.filter((f) => f.geometry?.type !== 'Point')
+      : drawn
     const layer = L.geoJSON(
-      { type: 'FeatureCollection', features: drawn },
+      { type: 'FeatureCollection', features: geoFeatures },
       {
         pointToLayer: (f, latlng) =>
           L.circleMarker(latlng, {
@@ -696,46 +720,45 @@ export function drawFeatureLayers({
     group.addLayer(layer)
     applyRoadLineStyle(layer, code, map)
 
-    const lineLayer = code === 'yollar' || code === 'suv' || features.every((f) => isLineGeom(f.geometry?.type))
-    const pinThese = !hidePins && !lineLayer && (
-      features.length <= 120 || features.some((f) => isPolyGeom(f.geometry?.type) || f.geometry?.type === 'Point')
-    )
     if (pinThese) {
-    features.forEach((f) => {
-      const p = f.properties || {}
-      const center = featureCenter(f)
-      if (!center) return
-      const r = radiusMeters(p, f.geometry?.type)
-      const name = loc(p, 'name', lang) || p.public_id || '—'
-      const recClass = p.road_class || ''
-      const pinColor = (code === 'istirohat' || code === 'park')
-        ? parkClassColor(recClass, color)
-        : color
-      if (isPolyGeom(f.geometry?.type) || f.geometry?.type === 'Point') {
-        L.circle(center, {
-          radius: r,
-          color: code === 'qabriston' ? '#64748b' : pinColor,
-          weight: code === 'qabriston' ? 2 : 1.5,
-          dashArray: code === 'qabriston' ? '6 4' : '5 5',
-          fillColor: code === 'qabriston' ? '#94a3b8' : pinColor,
-          fillOpacity: code === 'qabriston' ? 0.12 : 0.1,
-          interactive: false,
-          className: 'map-radius-ring',
-        }).addTo(group)
-      }
-      const typeLbl = (REC_TYPE_LABELS[lang] || REC_TYPE_LABELS.uz)[recClass] || ''
-      const pin = L.marker(center, {
-        icon: pinIcon(pinColor, code, recClass),
-        riseOnHover: true,
-        zIndexOffset: code === 'qabriston' ? 900 : (recClass === 'square' ? 750 : recClass === 'xiyobon' ? 700 : 650),
+      const LBL = POP[lang] || POP.uz
+      groupPinFeatures(features).forEach(({ center, items }) => {
+        const f = items[0]
+        const p = f.properties || {}
+        const name = loc(p, 'name', lang) || p.public_id || '—'
+        const recClass = p.road_class || ''
+        const pinColor = (code === 'istirohat' || code === 'park')
+          ? parkClassColor(recClass, color)
+          : color
+        const typeLbl = (REC_TYPE_LABELS[lang] || REC_TYPE_LABELS.uz)[recClass] || ''
+        const pin = L.marker(center, {
+          icon: pinIcon(pinColor, code, recClass),
+          riseOnHover: true,
+          zIndexOffset: code === 'qabriston' ? 900 : (recClass === 'square' ? 750 : recClass === 'xiyobon' ? 700 : 650),
+        })
+        const tooltipLines = items.length > 1
+          ? [
+            `<strong>${items.length} ${LBL.obj}</strong>`,
+            ...items.map((item) => {
+              const ip = item.properties || {}
+              const iname = loc(ip, 'name', lang) || ip.public_id || '—'
+              const itype = (REC_TYPE_LABELS[lang] || REC_TYPE_LABELS.uz)[ip.road_class || ''] || ''
+              return esc(iname) + (itype ? ` <span>(${esc(itype)})</span>` : '')
+            }),
+          ]
+          : [
+            `<strong>${esc(name)}</strong>`,
+            ...(typeLbl ? [`<span>${esc(typeLbl)}</span>`] : []),
+            ...(p.area_ha != null ? [`${p.area_ha} ga`] : []),
+          ]
+        pin.bindTooltip(tooltipLines.join('<br/>'), {
+          direction: 'top',
+          sticky: true,
+          className: 'map-pin-tip',
+        })
+        pin.on('click', () => onSelect?.(p))
+        pin.addTo(group)
       })
-      pin.bindTooltip(
-        `<strong>${esc(name)}</strong>${typeLbl ? `<br/><span>${esc(typeLbl)}</span>` : ''}<br/>R ≈ ${esc(formatRadius(r))}${p.area_ha != null ? ` · ${p.area_ha} ga` : ''}`,
-        { direction: 'top', sticky: true, className: 'map-pin-tip' },
-      )
-      pin.on('click', () => onSelect?.(p))
-      pin.addTo(group)
-    })
     }
 
     group.addTo(map)

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { BASEMAP_IDS } from '../map/basemaps'
+import { DEFAULT_MONITORING_YEAR } from '../map/mfyInsights'
 import { buildLayerGroups, ROAD_CLASS_LIST, WATER_CLASS_LIST, roadLayerKey, waterLayerKey, buildTypeFilterOptions } from '../constants/researchLayers'
 import { useI18n } from '../i18n/I18nContext'
 import { catName, loc } from '../i18n/loc'
@@ -130,6 +131,7 @@ export default function MapToolbar({
   onFiltersClear,
   mahallas = [],
   years = [],
+  mfyEnabled = true,
   onOpenNearest,
   compareHref = '/compare',
 }) {
@@ -144,7 +146,13 @@ export default function MapToolbar({
     [years],
   )
 
-  const hasInlineFilters = yearList.length > 0 || categories.length > 0 || mahallas.length > 0
+  const yearOptions = useMemo(() => {
+    if (!yearList.length) return []
+    const unique = [...new Set(yearList.map(Number))].sort((a, b) => b - a)
+    return unique.map((y) => ({ value: String(y), label: String(y) }))
+  }, [yearList])
+
+  const hasInlineFilters = yearOptions.length > 0 || categories.length > 0 || mahallas.length > 0
   const extrasActive = Boolean(filters.search?.trim())
 
   const mahallaOptions = useMemo(() => [
@@ -175,11 +183,6 @@ export default function MapToolbar({
     const row = categoryOptions.find((o) => o.isParks)
     return row?.label || t('layer.istirohat')
   }, [categoryOptions, t])
-
-  const yearOptions = useMemo(() => [
-    { value: '', label: t('map.monitoring') },
-    ...yearList.map((y) => ({ value: String(y), label: String(y) })),
-  ], [yearList, t])
 
   const layerKeys = useMemo(() => {
     const keys = boundaries.map((b) => `boundary:${b.code}`)
@@ -246,6 +249,8 @@ export default function MapToolbar({
                 />
               )
             })}
+            {mfyEnabled && (
+              <>
             <LayerRow
               label={t('map.mfyBoundaries')}
               visible={visibleLayers.mfy_boundaries !== false}
@@ -259,6 +264,8 @@ export default function MapToolbar({
               swatch={<LayerSwatch variant="mfy-point" />}
               indent
             />
+              </>
+            )}
             {groups.map((g) => {
               if (g.key === 'yollar') return null
               const visible = g.codes.every((code) => visibleLayers[code] !== false)
@@ -366,14 +373,14 @@ export default function MapToolbar({
           <>
             <div className="map-toolbar__sep map-toolbar__sep--filters" aria-hidden />
             <div className="map-toolbar__filters" role="group" aria-label={t('map.filter')}>
-              {yearList.length > 0 && (
+              {yearOptions.length > 0 && (
                 <PrettySelect
                   variant="toolbar"
                   className="map-toolbar__filter map-toolbar__filter--year"
-                  value={filters.year || ''}
+                  value={filters.year || String(yearOptions[0]?.value || DEFAULT_MONITORING_YEAR)}
                   onChange={(v) => onFiltersChange({ ...filters, year: v })}
                   options={yearOptions}
-                  placeholder={t('map.monitoring')}
+                  placeholder={t('map.year')}
                   isSearchable={false}
                   menuPlacement="auto"
                 />
@@ -392,7 +399,7 @@ export default function MapToolbar({
                   t={t}
                 />
               )}
-              {mahallas.length > 0 && (
+              {mfyEnabled && mahallas.length > 0 && (
                 <PrettySelect
                   variant="toolbar"
                   className="map-toolbar__filter map-toolbar__filter--mfy"

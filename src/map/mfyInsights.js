@@ -15,6 +15,8 @@ export const YEAR_SCALE = {
 
 export const TIMELINE_YEARS = [2018, 2020, 2022, 2024, 2026]
 
+export const DEFAULT_MONITORING_YEAR = 2026
+
 function ringContains(ring, lng, lat) {
   let inside = false
   for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {

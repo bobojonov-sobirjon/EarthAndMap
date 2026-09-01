@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { NavLink, Outlet, useNavigate } from 'react-router-dom'
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useTheme } from '../context/ThemeContext'
 import { useI18n } from '../i18n/I18nContext'
@@ -30,6 +30,7 @@ export default function Layout() {
   const { theme, toggleTheme } = useTheme()
   const { t } = useI18n()
   const navigate = useNavigate()
+  const location = useLocation()
   const [navOpen, setNavOpen] = useState(false)
   const [navCollapsed, setNavCollapsed] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
@@ -155,7 +156,9 @@ export default function Layout() {
         </nav>
       </aside>
       <main className="main-content" onClick={() => setMenuOpen(false)}>
-        <Outlet />
+        <div className="page-enter" key={location.pathname}>
+          <Outlet />
+        </div>
       </main>
     </div>
   )

@@ -12,7 +12,7 @@ import { useAuth } from '../context/AuthContext'
 import { landsApi, mapApi } from '../api/services'
 import { requestMapRefresh, useMapData } from '../hooks/useMapData'
 import { filterResearchCategories, isResearchCategory, ROAD_CLASS_LIST, WATER_CLASS_LIST, PARK_CLASS_LIST, roadLayerKey, waterLayerKey, parkLayerKey, parseTypeFilter, matchesTypeFilter } from '../constants/researchLayers'
-import { buildMfyInsightIndex, mfyPassport } from '../map/mfyInsights'
+import { buildMfyInsightIndex, mfyPassport, DEFAULT_MONITORING_YEAR } from '../map/mfyInsights'
 import { useI18n } from '../i18n/I18nContext'
 import { apiError } from '../i18n/apiError'
 import client from '../api/client'
@@ -35,7 +35,7 @@ export default function MapPage({ editable = false }) {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const [filters, setFilters] = useState({
-    search: '', category: '', mahalla: '', year: '',
+    search: '', category: '', mahalla: '', year: String(DEFAULT_MONITORING_YEAR),
   })
   const [visibleLayers, setVisibleLayers] = useState({})
   const [layersInitialized, setLayersInitialized] = useState(false)
@@ -61,6 +61,13 @@ export default function MapPage({ editable = false }) {
   const focusKey = (searchParams.get('land') || '').trim()
   const insightMode = heatmapOn || splitOn
 
+  const mapYear = useMemo(() => {
+    if (insightMode || focusKey) return null
+    const y = Number(filters.year)
+    if (Number.isFinite(y) && y > 0) return y
+    return null
+  }, [insightMode, focusKey, filters.year])
+
   const {
     boundaries,
     features,
@@ -72,13 +79,37 @@ export default function MapPage({ editable = false }) {
     refresh,
   } = useMapData({
     params: {
-      ...(!insightMode && filters.year && Number.isFinite(Number(filters.year)) && Number(filters.year) > 0 && !focusKey
-        ? { year: Number(filters.year) }
-        : {}),
+      ...(mapYear ? { year: mapYear } : {}),
     },
     pollIntervalMs: 30000,
     enabled: true,
   })
+
+  const dbYears = useMemo(
+    () => [...new Set((config?.years || [])
+      .filter((y) => Number.isFinite(Number(y)))
+      .map(Number))].sort((a, b) => b - a),
+    [config],
+  )
+
+  const defaultYear = dbYears[0] ?? DEFAULT_MONITORING_YEAR
+  const selectedYear = Number(filters.year) || defaultYear
+
+  useEffect(() => {
+    if (focusKey || !dbYears.length) return
+    const cur = Number(filters.year)
+    if (!Number.isFinite(cur) || !dbYears.includes(cur)) {
+      setFilters((f) => ({ ...f, year: String(defaultYear) }))
+    }
+  }, [dbYears, defaultYear, focusKey, filters.year])
+
+  const mfyEnabled = selectedYear === defaultYear && !focusKey
+
+  useEffect(() => {
+    if (mfyEnabled) return
+    setHeatmapOn(false)
+    setFilters((f) => (f.mahalla ? { ...f, mahalla: '' } : f))
+  }, [mfyEnabled])
 
   const categories = useMemo(
     () => filterResearchCategories(config?.categories || []),
@@ -159,8 +190,12 @@ export default function MapPage({ editable = false }) {
   }, [])
 
   useEffect(() => {
-    if (focusKey) setFilters((f) => ({ ...f, year: '' }))
-  }, [focusKey])
+    if (focusKey) {
+      setFilters((f) => ({ ...f, year: '' }))
+      return
+    }
+    setFilters((f) => (f.year === '' ? { ...f, year: String(defaultYear) } : f))
+  }, [focusKey, defaultYear])
 
   useEffect(() => {
     let alive = true
@@ -256,14 +291,14 @@ export default function MapPage({ editable = false }) {
   )
 
   const heatByName = useMemo(() => {
-    if (!heatmapOn) return null
+    if (!heatmapOn || !mfyEnabled) return null
     const map = {}
     mfyInsights.rows.forEach((r) => {
       // Zichlik: maydon birligiga obyekt (kam = past, ko'p = yuqori)
       map[r.name.toLowerCase()] = r.heat
     })
     return map
-  }, [heatmapOn, mfyInsights])
+  }, [heatmapOn, mfyEnabled, mfyInsights])
 
   const passport = useMemo(
     () => (filters.mahalla ? mfyPassport(mfyInsights, filters.mahalla) : null),
@@ -397,8 +432,8 @@ export default function MapPage({ editable = false }) {
             center={config?.center}
             geojson={filteredGeojson}
             boundary={boundaries}
-            mahallas={mahallaBoundaries}
-            mfyHighlight={filters.mahalla}
+            mahallas={mfyEnabled ? mahallaBoundaries : null}
+            mfyHighlight={mfyEnabled ? filters.mahalla : ''}
             heatByName={heatByName}
             visibleLayers={visibleLayers}
             selectedId={selected?.id}
@@ -413,6 +448,7 @@ export default function MapPage({ editable = false }) {
             showEditTools={canEdit}
             onCoordsChange={handleCoordsChange}
             fitToBoundary={!focusKey && !filters.mahalla}
+            boundaryFitKey={String(mapYear ?? DEFAULT_MONITORING_YEAR)}
             fitToFeatures={Boolean(fitFeaturesKey)}
             fitFeaturesKey={fitFeaturesKey}
             onUserLocation={setUserLocation}
@@ -423,10 +459,10 @@ export default function MapPage({ editable = false }) {
             basemap={basemap}
             onBasemapChange={setBasemap}
             heatmapOn={heatmapOn}
-            onToggleHeatmap={() => {
+            onToggleHeatmap={mfyEnabled ? () => {
               setHeatmapOn((v) => !v)
               setSplitOn(false)
-            }}
+            } : undefined}
             splitOn={splitOn}
             onToggleSplit={() => {
               setSplitOn((v) => {
@@ -458,11 +494,17 @@ export default function MapPage({ editable = false }) {
           </div>
         )}
 
-        {passport && !splitOn && (
+        {passport && !splitOn && mfyEnabled && (
           <MfyPassportCard
             passport={passport}
             onClose={() => setFilters((f) => ({ ...f, mahalla: '' }))}
           />
+        )}
+
+        {!splitOn && !mfyEnabled && !focusKey && (
+          <div className="map-mfy-year-notice" role="status">
+            {t('map.mfyYearOnly').replace('{year}', String(DEFAULT_MONITORING_YEAR))}
+          </div>
         )}
 
         {focusKey && (
@@ -490,9 +532,12 @@ export default function MapPage({ editable = false }) {
           onToggleGroup={handleToggleGroup}
           filters={filters}
           onFiltersChange={setFilters}
-          onFiltersClear={() => setFilters({ search: '', category: '', mahalla: '', year: '' })}
-          mahallas={mahallas}
-          years={config?.years || []}
+          onFiltersClear={() => setFilters({
+            search: '', category: '', mahalla: '', year: String(DEFAULT_MONITORING_YEAR),
+          })}
+          mahallas={mfyEnabled ? mahallas : []}
+          mfyEnabled={mfyEnabled}
+          years={dbYears}
           onOpenNearest={() => setShowNearest(true)}
           compareHref={editable ? '/admin-panel/compare' : '/compare'}
         />

@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import { adminApi } from '../api/services'
 import AdminCrudPage from './AdminCrudPage'
 import { CURRENT_YEAR, YEARS } from '../constants/years'
@@ -224,6 +225,7 @@ export function AdminBoundariesPage() {
         api: adminApi.boundaries,
         columns: [
           { key: 'code', label: 'Код' },
+          { key: 'monitoring_year', label: 'Год' },
           { key: 'name', label: 'Название' },
           { key: 'boundary_type', label: 'Тип' },
           { key: 'color', label: 'Цвет' },
@@ -232,6 +234,7 @@ export function AdminBoundariesPage() {
         ],
         fields: [
           { key: 'code', label: 'Код *' },
+          { key: 'monitoring_year', label: 'Год *', type: 'number' },
           { key: 'name', label: 'Название (UZ) *', lang: 'uz' },
           { key: 'name_ru', label: 'Название (RU)', lang: 'ru' },
           { key: 'name_en', label: 'Название (EN)', lang: 'en' },
@@ -247,7 +250,7 @@ export function AdminBoundariesPage() {
           { key: 'order', label: 'Порядок', type: 'number' },
           { key: 'is_visible', label: 'Видима', type: 'checkbox' },
         ],
-        defaultForm: { boundary_type: 'city', color: '#e74c3c', weight: 2, fill_opacity: 0.1, is_visible: true, order: 0 },
+        defaultForm: { boundary_type: 'city', monitoring_year: 2026, color: '#e74c3c', weight: 2, fill_opacity: 0.1, is_visible: true, order: 0 },
       }}
     />
   )
@@ -475,6 +478,97 @@ export function AdminIssuesPage() {
           { key: 'geometry', label: 'Геометрия', type: 'json' },
         ],
         defaultForm: { severity: 'medium', status: 'new', geometry_kind: 'Point' },
+      }}
+    />
+  )
+}
+
+export function AdminApplicationTypesPage() {
+  return (
+    <AdminCrudPage
+      config={{
+        title: 'Типы обращений',
+        subtitle: 'Ташкilot turlari (ApplicationType)',
+        help: {
+          title: 'Инструкция',
+          steps: [
+            'Сначала создайте тип — название организации (например: Kadastr palatasi).',
+            'В поле «Описание» укажите темы и ключевые слова — они используются при анализе мурожаата.',
+            'Затем в разделе «Сайты обращений» добавьте URL сайта для этого типа.',
+            'Активные типы видны пользователям в разделе «Мурожаат» на сайте.',
+          ],
+        },
+        api: adminApi.applicationTypes,
+        columns: [
+          { key: 'id', label: 'ID' },
+          { key: 'name', label: 'Название' },
+          {
+            key: 'description',
+            label: 'Описание',
+            render: (v) => v ? (String(v).length > 80 ? `${String(v).slice(0, 80)}…` : v) : '—',
+          },
+          { key: 'site_url', label: 'URL сайта', render: (v) => v ? <a href={v} target="_blank" rel="noreferrer">{v}</a> : '—' },
+          { key: 'is_active', label: 'Активен', render: bool },
+        ],
+        fields: [
+          { key: 'name', label: 'Название *' },
+          {
+            key: 'description',
+            label: 'Описание (для анализа)',
+            type: 'textarea',
+            rows: 4,
+            placeholder: 'Ключевые темы: земля, кадастр, границы...',
+          },
+          { key: 'is_active', label: 'Активен', type: 'checkbox' },
+        ],
+        defaultForm: { is_active: true },
+      }}
+    />
+  )
+}
+
+export function AdminApplicationSitesPage() {
+  return (
+    <AdminApplicationSitesCrud />
+  )
+}
+
+function AdminApplicationSitesCrud() {
+  const [typeOpts, setTypeOpts] = useState([])
+
+  useEffect(() => {
+    adminApi.applicationTypes.list().then(({ data }) => {
+      const list = Array.isArray(data) ? data : (data.results || [])
+      setTypeOpts(list.map((t) => ({ value: t.id, label: t.name })))
+    }).catch(() => setTypeOpts([]))
+  }, [])
+
+  return (
+    <AdminCrudPage
+      config={{
+        title: 'Сайты обращений',
+        subtitle: 'ApplicationOnSite — URL для iframe',
+        help: {
+          title: 'Инструкция',
+          steps: [
+            'Выберите тип обращения и укажите полный URL сайта организации.',
+            'Этот адрес откроется внутри платформы при отправке мурожаата.',
+            'Если сайт блокирует iframe — попробуйте другой URL или страницу.',
+          ],
+        },
+        api: adminApi.applicationSites,
+        columns: [
+          { key: 'id', label: 'ID' },
+          { key: 'application_type_name', label: 'Тип' },
+          { key: 'site_url', label: 'URL', render: (v) => v ? <a href={v} target="_blank" rel="noreferrer">{v}</a> : '—' },
+          { key: 'is_active', label: 'Активен', render: bool },
+        ],
+        fields: [
+          { key: 'application_type', label: 'Тип обращения *', type: 'select', options: typeOpts },
+          { key: 'site_url', label: 'URL сайта *', placeholder: 'https://...' },
+          { key: 'is_active', label: 'Активен', type: 'checkbox' },
+        ],
+        defaultForm: { is_active: true },
       }}
     />
   )

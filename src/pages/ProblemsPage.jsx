@@ -1,5 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
+import ApplicationTypePickerModal from '../components/ApplicationTypePickerModal'
+import ApplicationEmbedModal from '../components/ApplicationEmbedModal'
+import ProblemAnalysisModal from '../components/ProblemAnalysisModal'
 import { monitoringApi } from '../api/services'
 import { useAuth } from '../context/AuthContext'
 import { useI18n } from '../i18n/I18nContext'
@@ -24,11 +27,6 @@ const SEV_STYLE = {
 
 const FLOW = { new: 'open', open: 'in_progress', in_progress: 'resolved', resolved: 'closed' }
 
-const EMPTY = {
-  title: '', description: '', severity: 'medium',
-  geometry_kind: 'Point', latitude: '', longitude: '',
-}
-
 function IcoPlus({ size = 16 }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden>
@@ -37,14 +35,24 @@ function IcoPlus({ size = 16 }) {
   )
 }
 
+function IcoAnalyze({ size = 16 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+      <circle cx="11" cy="11" r="7" />
+      <path d="M20 20l-3.5-3.5" strokeLinecap="round" />
+    </svg>
+  )
+}
+
 export default function ProblemsPage() {
   const { user, canEdit } = useAuth()
   const { t, lang } = useI18n()
   const [issues, setIssues] = useState([])
+  const [submissions, setSubmissions] = useState([])
   const [loading, setLoading] = useState(true)
-  const [showForm, setShowForm] = useState(false)
-  const [form, setForm] = useState(EMPTY)
-  const [saving, setSaving] = useState(false)
+  const [showAnalysis, setShowAnalysis] = useState(false)
+  const [showTypePicker, setShowTypePicker] = useState(false)
+  const [embedSelection, setEmbedSelection] = useState(null)
   const [filterStatus, setFilterStatus] = useState('')
   const [filterSeverity, setFilterSeverity] = useState('')
   const [search, setSearch] = useState('')
@@ -55,8 +63,13 @@ export default function ProblemsPage() {
     setLoading(true)
     setError('')
     try {
-      const { data } = await monitoringApi.issues()
-      setIssues(data.results || data || [])
+      const reqs = [monitoringApi.issues()]
+      if (user) reqs.push(monitoringApi.submissions())
+      const [issuesRes, subsRes] = await Promise.all(reqs)
+      setIssues(issuesRes.data.results || issuesRes.data || [])
+      if (subsRes) {
+        setSubmissions(subsRes.data.results || subsRes.data || [])
+      }
     } catch (err) {
       setError(apiError(err, t, 'msg.loadFail'))
     } finally {
@@ -64,34 +77,7 @@ export default function ProblemsPage() {
     }
   }
 
-  useEffect(() => { load() }, [])
-
-  const handleCreate = async (e) => {
-    e.preventDefault()
-    if (!user) return
-    setSaving(true)
-    setError('')
-    setOk('')
-    try {
-      await monitoringApi.createIssue({
-        ...form,
-        latitude: form.latitude ? Number(form.latitude) : null,
-        longitude: form.longitude ? Number(form.longitude) : null,
-        geometry: form.latitude && form.longitude
-          ? { type: 'Point', coordinates: [Number(form.longitude), Number(form.latitude)] }
-          : null,
-        status: 'new',
-      })
-      setForm(EMPTY)
-      setShowForm(false)
-      setOk(t('msg.created'))
-      load()
-    } catch (err) {
-      setError(apiError(err, t, 'msg.saveFail'))
-    } finally {
-      setSaving(false)
-    }
-  }
+  useEffect(() => { load() }, [user])
 
   const advance = async (issue) => {
     const next = FLOW[issue.status]
@@ -126,6 +112,17 @@ export default function ProblemsPage() {
     return list
   }, [issues, filterStatus, filterSeverity, search])
 
+  const handleSelectType = (row) => {
+    setShowAnalysis(false)
+    setShowTypePicker(false)
+    setEmbedSelection(row)
+  }
+
+  const handleSubmitted = () => {
+    setOk(t('problems.submitOk'))
+    load()
+  }
+
   return (
     <div className="module-page problems-page">
       <header className="dash-head">
@@ -135,9 +132,14 @@ export default function ProblemsPage() {
           <p className="muted">{t('problems.sub')}</p>
         </div>
         {user ? (
-          <button type="button" className="btn btn-primary" onClick={() => setShowForm((v) => !v)}>
-            <IcoPlus /> {showForm ? t('common.cancel') : t('problems.add')}
-          </button>
+          <div className="problems-head-actions">
+            <button type="button" className="btn btn-outline" onClick={() => setShowAnalysis(true)}>
+              <IcoAnalyze /> {t('problems.analysisBtn')}
+            </button>
+            <button type="button" className="btn btn-primary" onClick={() => setShowTypePicker(true)}>
+              <IcoPlus /> {t('problems.add')}
+            </button>
+          </div>
         ) : (
           <Link className="btn btn-primary" to="/login?next=/problems">{t('problems.loginToAdd')}</Link>
         )}
@@ -152,6 +154,55 @@ export default function ProblemsPage() {
 
       {error && <div className="admin-error">{error}</div>}
       {ok && <div className="admin-ok">{ok}</div>}
+
+      <ProblemAnalysisModal
+        open={showAnalysis && user}
+        onClose={() => setShowAnalysis(false)}
+        onSelectType={handleSelectType}
+      />
+
+      <ApplicationTypePickerModal
+        open={showTypePicker && user}
+        onClose={() => setShowTypePicker(false)}
+        onSelectType={handleSelectType}
+      />
+
+      <ApplicationEmbedModal
+        open={Boolean(embedSelection)}
+        selection={embedSelection}
+        onClose={() => setEmbedSelection(null)}
+        onSubmitted={handleSubmitted}
+      />
+
+      {user && submissions.length > 0 && (
+        <section className="problems-submissions">
+          <h3>{t('problems.mySubmissions')}</h3>
+          <div className="table-wrap">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>{t('form.name')}</th>
+                  <th>{t('problems.orgType')}</th>
+                  <th>{t('problems.match')}</th>
+                  <th>{t('form.status')}</th>
+                  <th>{t('problems.subDate')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {submissions.map((s) => (
+                  <tr key={s.id}>
+                    <td>{s.title || '—'}</td>
+                    <td>{s.application_type_name}</td>
+                    <td>{s.match_score}%</td>
+                    <td>{t(`problems.subStatus.${s.status}`)}</td>
+                    <td>{new Date(s.created_at).toLocaleDateString(dateLocale(lang))}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
 
       <section className="problems-kpi">
         {[
@@ -177,60 +228,6 @@ export default function ProblemsPage() {
         ))}
       </section>
 
-      {showForm && user && (
-        <div className="problems-form-wrap">
-          <div className="problems-form-head">
-            <h3>{t('problems.formTitle')}</h3>
-            <button type="button" className="btn btn-ghost btn-sm" onClick={() => setShowForm(false)}>×</button>
-          </div>
-          <form className="problems-form" onSubmit={handleCreate}>
-            <label>
-              {t('form.name')}
-              <input required value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
-            </label>
-            <label>
-              {t('form.desc')}
-              <textarea required rows={3} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
-            </label>
-            <div className="problems-form-row">
-              <label>
-                {t('problems.mark')}
-                <select value={form.geometry_kind} onChange={(e) => setForm({ ...form, geometry_kind: e.target.value })}>
-                  <option value="Point">{t('geo.Point')}</option>
-                  <option value="LineString">{t('geo.LineString')}</option>
-                  <option value="Polygon">{t('geo.Polygon')}</option>
-                </select>
-              </label>
-              <label>
-                {t('mon.severity')}
-                <select value={form.severity} onChange={(e) => setForm({ ...form, severity: e.target.value })}>
-                  {['low', 'medium', 'high', 'critical'].map((k) => (
-                    <option key={k} value={k}>{t(`sev.${k}`)}</option>
-                  ))}
-                </select>
-              </label>
-            </div>
-            <div className="problems-form-row">
-              <label>
-                {t('problems.lat')}
-                <input value={form.latitude} onChange={(e) => setForm({ ...form, latitude: e.target.value })} placeholder="39.77" />
-              </label>
-              <label>
-                {t('problems.lng')}
-                <input value={form.longitude} onChange={(e) => setForm({ ...form, longitude: e.target.value })} placeholder="64.42" />
-              </label>
-            </div>
-            <p className="muted" style={{ margin: 0, fontSize: '0.8rem' }}>{t('problems.coordHint')}</p>
-            <div className="problems-form-footer">
-              <button type="button" className="btn btn-ghost" onClick={() => setShowForm(false)}>{t('common.cancel')}</button>
-              <button type="submit" className="btn btn-primary" disabled={saving}>
-                {saving ? t('common.loading') : t('common.save')}
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
-
       <div className="problems-filters">
         <input
           className="problems-search"
@@ -253,8 +250,8 @@ export default function ProblemsPage() {
           <strong>{t('problems.empty')}</strong>
           <p>{user ? t('problems.emptyHintUser') : t('problems.emptyHintGuest')}</p>
           {!user && <Link className="btn btn-primary" to="/login?next=/problems">{t('auth.login')}</Link>}
-          {user && !showForm && (
-            <button type="button" className="btn btn-primary" onClick={() => setShowForm(true)}>
+          {user && (
+            <button type="button" className="btn btn-primary" onClick={() => setShowTypePicker(true)}>
               {t('problems.add')}
             </button>
           )}
