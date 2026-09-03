@@ -5976,17 +5976,22 @@ body {
 }
 
 .summary-card {
-
   background: var(--surface); border: 1px solid var(--border); border-top: 3px solid var(--primary);
-
   border-radius: 12px; padding: 0.85rem 1rem;
-
 }
-
+button.summary-card {
+  display: block;
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+}
+button.summary-card:hover {
+  border-color: color-mix(in srgb, var(--primary) 45%, var(--border));
+}
 .summary-card strong { display: block; font-size: 1.25rem; color: var(--primary); }
-
 .summary-card span { display: block; font-size: 0.85rem; }
-
 .summary-card small { color: var(--muted); }
 
 .lands-layout { display: grid; grid-template-columns: 1fr; gap: 1rem; }

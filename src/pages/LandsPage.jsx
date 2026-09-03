@@ -245,11 +245,22 @@ export default function LandsPage() {
 
       <div className="lands-summary">
         {summary.map((s) => (
-          <div key={s.key} className="summary-card" style={{ borderTopColor: s.color }}>
+          <button
+            key={s.key}
+            type="button"
+            className="summary-card"
+            style={{ borderTopColor: s.color }}
+            title={`${t(`layer.${s.key}`)} — xaritada ochish`}
+            onClick={() => {
+              const y = yearFilter || CURRENT_YEAR
+              const cat = s.codes?.[0] || s.key
+              navigate(`/map?category=${encodeURIComponent(cat)}&year=${y}`)
+            }}
+          >
             <strong>{s.count}</strong>
             <span>{t(`layer.${s.key}`)}</span>
             <small>{s.metric}</small>
-          </div>
+          </button>
         ))}
       </div>
 
@@ -285,7 +296,7 @@ export default function LandsPage() {
                   <td>{land.updated_at ? new Date(land.updated_at).toLocaleDateString('uz') : '—'}</td>
                   <td className="actions-cell">
                     <button type="button" className="btn btn-sm btn-secondary" title="Batafsil" onClick={() => openDetail(land)}>📄</button>
-                    <button type="button" className="btn btn-sm btn-secondary" title="Xaritada ko'rsatish" onClick={() => navigate(`/map?land=${land.id}`)}>🗺️</button>
+                    <button type="button" className="btn btn-sm btn-secondary" title="Xaritada ko'rsatish" onClick={() => navigate(`/map?land=${land.id}&year=${land.monitoring_year || yearFilter || CURRENT_YEAR}`)}>🗺️</button>
                     <button type="button" className="btn btn-sm btn-secondary" title="PDF kartochka" onClick={() => exportPdfCard(land)}>⬇️</button>
                     <button type="button" className="btn btn-sm btn-ghost" title="Versiyalar" onClick={() => showVersions(land)}>⏱</button>
                     {canEdit && (
@@ -316,7 +327,7 @@ export default function LandsPage() {
               {selected.description && <div className="full"><span>Tavsif</span><p>{selected.description}</p></div>}
             </div>
             <div className="lands-detail-actions">
-              <button type="button" className="btn btn-primary" onClick={() => navigate(`/map?land=${selected.id}`)}>
+              <button type="button" className="btn btn-primary" onClick={() => navigate(`/map?land=${selected.id}&year=${selected.monitoring_year || yearFilter || CURRENT_YEAR}`)}>
                 Xaritada ochish
               </button>
               <button type="button" className="btn btn-secondary" onClick={() => exportPdfCard(selected)}>

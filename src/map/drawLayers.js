@@ -271,11 +271,22 @@ export function drawBoundaries({
     const code = f.properties?.code
     return visibleLayers[`boundary:${code}`] !== false
   })
-  if (!visibleFeatures.length) return null
+  // Bir xil code (turli yillar) bo'lsa — faqat bitta (eng yangi yoki monitoring_year max)
+  const deduped = []
+  const seen = new Set()
+  ;[...visibleFeatures]
+    .sort((a, b) => Number(b.properties?.monitoring_year || 0) - Number(a.properties?.monitoring_year || 0))
+    .forEach((f) => {
+      const code = f.properties?.code || f.id
+      if (seen.has(code)) return
+      seen.add(code)
+      deduped.push(f)
+    })
+  if (!deduped.length) return null
 
   const group = createOverlayGroup(map)
   const layer = L.geoJSON(
-    { type: 'FeatureCollection', features: visibleFeatures },
+    { type: 'FeatureCollection', features: deduped },
     {
       style: (feature) => {
         const p = feature.properties || {}
@@ -295,7 +306,8 @@ export function drawBoundaries({
       onEachFeature: (feature, lyr) => {
         const p = feature.properties || {}
         const label = loc(p, 'name', lang) || POP[lang]?.bound || POP.uz.bound
-        lyr.bindPopup(`<strong>${esc(label)}</strong>`)
+        const year = p.monitoring_year ? ` · ${p.monitoring_year}` : ''
+        lyr.bindPopup(`<strong>${esc(label)}${esc(year)}</strong>`)
         lyr.bringToBack?.()
       },
     },
@@ -304,8 +316,8 @@ export function drawBoundaries({
   boundaryRef.current = group
 
   if (fitToBoundary && fitOnceRef && !fitOnceRef.current) {
-    const city = visibleFeatures.find((f) => f.properties?.boundary_type === 'city')
-      || visibleFeatures[0]
+    const city = deduped.find((f) => f.properties?.boundary_type === 'city')
+      || deduped[0]
     try {
       const bounds = L.geoJSON(city).getBounds()
       if (bounds.isValid()) {

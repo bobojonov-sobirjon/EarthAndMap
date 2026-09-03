@@ -28,14 +28,61 @@ function featureMatchesLand(feature, key) {
   return vals.some((v) => v != null && String(v).trim().toLowerCase() === k)
 }
 
+/** Fokus/kategoriya uchun qatlamlar: yo'l/suv/bog' pastki turlarini ham yoqadi. */
+function applyCategoryVisibility(prev, code) {
+  const next = { ...prev }
+  Object.keys(next).forEach((k) => {
+    if (k.startsWith('boundary:')) return
+    if (k === 'mfy_boundaries' || k === 'mfy_points') {
+      next[k] = false
+      return
+    }
+    next[k] = false
+  })
+  if (!code) return next
+  next[code] = true
+  if (code === 'park') next.istirohat = true
+  if (code === 'istirohat') next.park = true
+  if (code === 'yollar') {
+    ROAD_CLASS_LIST.forEach((r) => { next[roadLayerKey(r.id)] = true })
+  }
+  if (code === 'suv') {
+    WATER_CLASS_LIST.forEach((w) => { next[waterLayerKey(w.id)] = true })
+  }
+  if (code === 'istirohat' || code === 'park') {
+    PARK_CLASS_LIST.forEach((p) => { next[parkLayerKey(p.id)] = true })
+  }
+  return next
+}
+
+/** Qatlamlar ro'yxatida bir xil code (turli yillar) takrorlanmasin. */
+function uniqueBoundaries(features = []) {
+  const byCode = new Map()
+  features.forEach((f) => {
+    const p = f.properties || {}
+    const code = p.code
+    if (!code) return
+    const prev = byCode.get(code)
+    if (!prev || Number(p.monitoring_year) > Number(prev.monitoring_year || 0)) {
+      byCode.set(code, p)
+    }
+  })
+  return [...byCode.values()]
+}
+
 export default function MapPage({ editable = false }) {
   const { t } = useI18n()
   const { canEdit: authCanEdit } = useAuth()
   const canEdit = Boolean(editable && authCanEdit)
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
+  const urlYear = (searchParams.get('year') || '').trim()
+  const urlCategory = (searchParams.get('category') || '').trim()
   const [filters, setFilters] = useState({
-    search: '', category: '', mahalla: '', year: String(DEFAULT_MONITORING_YEAR),
+    search: '',
+    category: urlCategory,
+    mahalla: '',
+    year: urlYear || String(DEFAULT_MONITORING_YEAR),
   })
   const [visibleLayers, setVisibleLayers] = useState({})
   const [layersInitialized, setLayersInitialized] = useState(false)
@@ -98,9 +145,11 @@ export default function MapPage({ editable = false }) {
   const selectedYear = Number(filters.year) || defaultYear
 
   useEffect(() => {
-    if (focusKey || !dbYears.length) return
+    if (!dbYears.length) return
     const cur = Number(filters.year)
     if (!Number.isFinite(cur) || !dbYears.includes(cur)) {
+      // Fokus obyekt yili bazada bo'lmasa ham saqlansin; aks holda default.
+      if (focusKey && Number.isFinite(cur) && cur > 0) return
       setFilters((f) => ({ ...f, year: String(defaultYear) }))
     }
   }, [dbYears, defaultYear, focusKey, filters.year])
@@ -112,6 +161,18 @@ export default function MapPage({ editable = false }) {
     setHeatmapOn(false)
     setFilters((f) => (f.mahalla ? { ...f, mahalla: '' } : f))
   }, [mfyEnabled])
+
+  useEffect(() => {
+    if (!urlCategory) return
+    setFilters((f) => (f.category === urlCategory ? f : { ...f, category: urlCategory }))
+  }, [urlCategory])
+
+  useEffect(() => {
+    if (!urlYear) return
+    const y = Number(urlYear)
+    if (!Number.isFinite(y) || y <= 0) return
+    setFilters((f) => (String(f.year) === String(y) ? f : { ...f, year: String(y) }))
+  }, [urlYear])
 
   const categories = useMemo(
     () => filterResearchCategories(config?.categories || []),
@@ -192,12 +253,11 @@ export default function MapPage({ editable = false }) {
   }, [])
 
   useEffect(() => {
-    if (focusKey) {
-      setFilters((f) => ({ ...f, year: '' }))
-      return
+    // Fokusda yilni tozalamaymiz — aks holda barcha yillardagi shahar chegarasi chiqadi.
+    if (!focusKey && filters.year === '') {
+      setFilters((f) => ({ ...f, year: String(defaultYear) }))
     }
-    setFilters((f) => (f.year === '' ? { ...f, year: String(defaultYear) } : f))
-  }, [focusKey, defaultYear])
+  }, [focusKey, defaultYear, filters.year])
 
   useEffect(() => {
     let alive = true
@@ -206,21 +266,24 @@ export default function MapPage({ editable = false }) {
       return undefined
     }
 
+    const applyFocus = (feature) => {
+      if (!feature?.geometry) return
+      setFocusFeature(feature)
+      const props = feature.properties || {}
+      handleSelect(props)
+      const y = Number(props.monitoring_year)
+      if (Number.isFinite(y) && y > 0) {
+        setFilters((f) => (String(f.year) === String(y) ? f : { ...f, year: String(y) }))
+      }
+      const code = props.category_code
+      if (code) {
+        setVisibleLayers((prev) => applyCategoryVisibility(prev, code))
+      }
+    }
+
     const fromSnap = (features?.features || []).find((f) => featureMatchesLand(f, focusKey))
     if (fromSnap) {
-      setFocusFeature(fromSnap)
-      handleSelect(fromSnap.properties)
-      const code = fromSnap.properties?.category_code
-      if (code) {
-        setVisibleLayers((prev) => {
-          const next = { ...prev }
-          Object.keys(next).forEach((k) => {
-            if (!k.startsWith('boundary:')) next[k] = k === code || (code === 'park' && k === 'istirohat') || (code === 'istirohat' && k === 'park')
-          })
-          next[code] = true
-          return next
-        })
-      }
+      applyFocus(fromSnap)
       return undefined
     }
 
@@ -228,8 +291,7 @@ export default function MapPage({ editable = false }) {
       try {
         const { data } = await client.get(`/lands/${focusKey}/feature/`)
         if (!alive || !data?.geometry) return
-        setFocusFeature(data)
-        handleSelect(data.properties || data)
+        applyFocus(data)
       } catch {
         if (alive) setFocusFeature(null)
       }
@@ -237,6 +299,14 @@ export default function MapPage({ editable = false }) {
     loadSolo()
     return () => { alive = false }
   }, [focusKey, features, handleSelect])
+
+  // Reyestrdan kategoriya (yo'llar/qabriston...) bilan kelganda faqat shu qatlam.
+  useEffect(() => {
+    if (focusKey || !urlCategory || !layersInitialized) return
+    const { category } = parseTypeFilter(urlCategory)
+    if (!category) return
+    setVisibleLayers((prev) => applyCategoryVisibility(prev, category))
+  }, [focusKey, urlCategory, layersInitialized])
 
   const filteredGeojson = useMemo(() => {
     if (focusKey && focusFeature?.geometry) {
@@ -527,7 +597,7 @@ export default function MapPage({ editable = false }) {
         <MapToolbar
           basemap={basemap}
           onBasemapChange={setBasemap}
-          boundaries={(boundaries?.features || []).map((f) => f.properties)}
+          boundaries={uniqueBoundaries(boundaries?.features || [])}
           categories={config?.categories || []}
           visibleLayers={visibleLayers}
           onToggle={handleToggleLayer}
