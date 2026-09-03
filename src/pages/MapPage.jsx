@@ -62,11 +62,13 @@ export default function MapPage({ editable = false }) {
   const insightMode = heatmapOn || splitOn
 
   const mapYear = useMemo(() => {
-    if (insightMode || focusKey) return null
+    // Split-compare uchun backenddan barcha yillar kerak (SplitCompareView o'zi filtr qiladi).
+    // Qolgan rejimlarda esa server year bo'yicha filtrni qo'llasin.
+    if (splitOn) return null
     const y = Number(filters.year)
     if (Number.isFinite(y) && y > 0) return y
     return null
-  }, [insightMode, focusKey, filters.year])
+  }, [splitOn, filters.year])
 
   const {
     boundaries,

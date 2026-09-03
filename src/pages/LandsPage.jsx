@@ -12,6 +12,7 @@ import { loc, catName } from '../i18n/loc'
 import { useI18n } from '../i18n/I18nContext'
 import { apiError } from '../i18n/apiError'
 import PageLoader from '../components/PageLoader'
+import { CURRENT_YEAR, YEARS } from '../constants/years'
 
 const STATUS_LABELS = {
   active: 'Faol',
@@ -32,6 +33,7 @@ export default function LandsPage() {
   const [categoryFilter, setCategoryFilter] = useState('')
   const [mahallaFilter, setMahallaFilter] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
+  const [yearFilter, setYearFilter] = useState(CURRENT_YEAR)
   const [selected, setSelected] = useState(null)
   const [selectedVersions, setSelectedVersions] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -45,6 +47,7 @@ export default function LandsPage() {
       if (search) params.search = search
       if (categoryFilter) params.category = categoryFilter
       if (statusFilter) params.status = statusFilter
+      if (yearFilter) params.monitoring_year = yearFilter
       if (mahallaFilter) params.search = [search, mahallaFilter].filter(Boolean).join(' ')
       const [landsRes, catsRes] = await Promise.all([
         landsApi.list(params),
@@ -102,6 +105,7 @@ export default function LandsPage() {
     setCategoryFilter('')
     setMahallaFilter('')
     setStatusFilter('')
+    setYearFilter(CURRENT_YEAR)
     setTimeout(load, 0)
   }
 
@@ -216,6 +220,10 @@ export default function LandsPage() {
           onChange={(e) => setSearch(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && load()}
         />
+        <select value={yearFilter || ''} onChange={(e) => setYearFilter(Number(e.target.value) || '')}>
+          <option value="">{t('common.all')} — {t('map.year')}</option>
+          {YEARS.map((y) => <option key={y} value={y}>{y}</option>)}
+        </select>
         <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)}>
           <option value="">{t('lands.allCats')}</option>
           {researchCats.map((c) => (
