@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { categoriesApi, landsApi, statsApi } from '../api/services'
+import { categoriesApi, landsApi, mapApi, statsApi } from '../api/services'
 import { useAuth } from '../context/AuthContext'
 import {
   displayCategoryName,
@@ -12,7 +12,7 @@ import { loc, catName } from '../i18n/loc'
 import { useI18n } from '../i18n/I18nContext'
 import { apiError } from '../i18n/apiError'
 import PageLoader from '../components/PageLoader'
-import { CURRENT_YEAR, YEARS } from '../constants/years'
+import { CURRENT_YEAR } from '../constants/years'
 
 const STATUS_LABELS = {
   active: 'Faol',
@@ -29,25 +29,28 @@ export default function LandsPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const [lands, setLands] = useState([])
   const [categories, setCategories] = useState([])
+  const [dbYears, setDbYears] = useState([])
   const [search, setSearch] = useState('')
   const [categoryFilter, setCategoryFilter] = useState('')
   const [mahallaFilter, setMahallaFilter] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
-  const [yearFilter, setYearFilter] = useState(CURRENT_YEAR)
+  const [yearFilter, setYearFilter] = useState('')
   const [selected, setSelected] = useState(null)
   const [selectedVersions, setSelectedVersions] = useState(null)
   const [loading, setLoading] = useState(true)
 
   const researchCats = useMemo(() => filterResearchCategories(categories), [categories])
+  const defaultYear = dbYears[0] ?? CURRENT_YEAR
 
-  const load = async () => {
+  const load = async (opts = {}) => {
+    const year = opts.year !== undefined ? opts.year : yearFilter
     setLoading(true)
     try {
       const params = {}
       if (search) params.search = search
       if (categoryFilter) params.category = categoryFilter
       if (statusFilter) params.status = statusFilter
-      if (yearFilter) params.monitoring_year = yearFilter
+      if (year) params.monitoring_year = year
       if (mahallaFilter) params.search = [search, mahallaFilter].filter(Boolean).join(' ')
       const [landsRes, catsRes] = await Promise.all([
         landsApi.list(params),
@@ -61,7 +64,28 @@ export default function LandsPage() {
     }
   }
 
-  useEffect(() => { load() }, [])
+  useEffect(() => {
+    let alive = true
+    ;(async () => {
+      let years = []
+      try {
+        const { data } = await mapApi.config()
+        years = [...new Set((data?.years || [])
+          .map(Number)
+          .filter((y) => Number.isFinite(y) && y > 0))]
+          .sort((a, b) => b - a)
+      } catch {
+        years = []
+      }
+      if (!alive) return
+      setDbYears(years)
+      const initial = years[0] ? String(years[0]) : String(CURRENT_YEAR)
+      setYearFilter(initial)
+      await load({ year: initial })
+    })()
+    return () => { alive = false }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   useEffect(() => {
     const landId = searchParams.get('land')
@@ -105,8 +129,9 @@ export default function LandsPage() {
     setCategoryFilter('')
     setMahallaFilter('')
     setStatusFilter('')
-    setYearFilter(CURRENT_YEAR)
-    setTimeout(load, 0)
+    const y = defaultYear ? String(defaultYear) : ''
+    setYearFilter(y)
+    setTimeout(() => load({ year: y }), 0)
   }
 
   const exportCsv = () => {
@@ -220,9 +245,18 @@ export default function LandsPage() {
           onChange={(e) => setSearch(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && load()}
         />
-        <select value={yearFilter || ''} onChange={(e) => setYearFilter(Number(e.target.value) || '')}>
+        <select
+          value={yearFilter}
+          onChange={(e) => {
+            const y = e.target.value
+            setYearFilter(y)
+            setTimeout(() => load({ year: y }), 0)
+          }}
+        >
           <option value="">{t('common.all')} — {t('map.year')}</option>
-          {YEARS.map((y) => <option key={y} value={y}>{y}</option>)}
+          {(dbYears.length ? dbYears : [CURRENT_YEAR]).map((y) => (
+            <option key={y} value={y}>{y}</option>
+          ))}
         </select>
         <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)}>
           <option value="">{t('lands.allCats')}</option>
@@ -252,7 +286,7 @@ export default function LandsPage() {
             style={{ borderTopColor: s.color }}
             title={`${t(`layer.${s.key}`)} — xaritada ochish`}
             onClick={() => {
-              const y = yearFilter || CURRENT_YEAR
+              const y = yearFilter || defaultYear
               const cat = s.codes?.[0] || s.key
               navigate(`/map?category=${encodeURIComponent(cat)}&year=${y}`)
             }}
@@ -296,7 +330,7 @@ export default function LandsPage() {
                   <td>{land.updated_at ? new Date(land.updated_at).toLocaleDateString('uz') : '—'}</td>
                   <td className="actions-cell">
                     <button type="button" className="btn btn-sm btn-secondary" title="Batafsil" onClick={() => openDetail(land)}>📄</button>
-                    <button type="button" className="btn btn-sm btn-secondary" title="Xaritada ko'rsatish" onClick={() => navigate(`/map?land=${land.id}&year=${land.monitoring_year || yearFilter || CURRENT_YEAR}`)}>🗺️</button>
+                    <button type="button" className="btn btn-sm btn-secondary" title="Xaritada ko'rsatish" onClick={() => navigate(`/map?land=${land.id}&year=${land.monitoring_year || yearFilter || defaultYear}`)}>🗺️</button>
                     <button type="button" className="btn btn-sm btn-secondary" title="PDF kartochka" onClick={() => exportPdfCard(land)}>⬇️</button>
                     <button type="button" className="btn btn-sm btn-ghost" title="Versiyalar" onClick={() => showVersions(land)}>⏱</button>
                     {canEdit && (
@@ -327,7 +361,7 @@ export default function LandsPage() {
               {selected.description && <div className="full"><span>Tavsif</span><p>{selected.description}</p></div>}
             </div>
             <div className="lands-detail-actions">
-              <button type="button" className="btn btn-primary" onClick={() => navigate(`/map?land=${selected.id}&year=${selected.monitoring_year || yearFilter || CURRENT_YEAR}`)}>
+              <button type="button" className="btn btn-primary" onClick={() => navigate(`/map?land=${selected.id}&year=${selected.monitoring_year || yearFilter || defaultYear}`)}>
                 Xaritada ochish
               </button>
               <button type="button" className="btn btn-secondary" onClick={() => exportPdfCard(selected)}>
