@@ -22,6 +22,7 @@ import {
   polygonPerimeterM,
   polylineLengthM,
 } from '../map/measureUtils'
+import { geoErrorKey, getUserPosition, httpsUpgradeUrl } from '../map/geolocation'
 
 export default function MapControls({
   map,
@@ -116,25 +117,28 @@ export default function MapControls({
     }
   }, [map, t])
 
-  const locateMe = useCallback(() => {
+  const locateMe = useCallback(async () => {
     if (!map) return
-    if (!navigator.geolocation) {
-      goHome()
-      return
-    }
     setLocating(true)
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        const { latitude, longitude } = pos.coords
-        map.flyTo([latitude, longitude], Math.max(map.getZoom(), 15), { duration: 1.2 })
-        onCoordsChange?.(`${latitude.toFixed(4)}° N, ${longitude.toFixed(4)}° E`)
-        onUserLocation?.({ lat: latitude, lng: longitude })
-        setLocating(false)
-      },
-      () => { goHome(); setLocating(false) },
-      { enableHighAccuracy: true, timeout: 8000 },
-    )
-  }, [map, goHome, onCoordsChange, onUserLocation])
+    try {
+      const pos = await getUserPosition()
+      const { latitude, longitude } = pos.coords
+      map.flyTo([latitude, longitude], Math.max(map.getZoom(), 15), { duration: 1.2 })
+      onCoordsChange?.(`${latitude.toFixed(4)}° N, ${longitude.toFixed(4)}° E`)
+      onUserLocation?.({ lat: latitude, lng: longitude })
+    } catch (err) {
+      const key = geoErrorKey(err)
+      if (key === 'route.gps.insecure') {
+        const httpsUrl = httpsUpgradeUrl()
+        const goHttps = window.confirm(`${t(key)}\n\n${httpsUrl}`)
+        if (goHttps && httpsUrl) window.location.replace(httpsUrl)
+      } else {
+        window.alert(t(key))
+      }
+    } finally {
+      setLocating(false)
+    }
+  }, [map, onCoordsChange, onUserLocation, t])
 
   const printMap = useCallback(() => {
     document.body.classList.add('map-printing')

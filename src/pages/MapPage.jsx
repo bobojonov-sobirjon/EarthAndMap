@@ -16,6 +16,7 @@ import { buildMfyInsightIndex, mfyPassport, DEFAULT_MONITORING_YEAR } from '../m
 import { useI18n } from '../i18n/I18nContext'
 import { apiError } from '../i18n/apiError'
 import client from '../api/client'
+import { geoErrorKey, getUserPosition, httpsUpgradeUrl } from '../map/geolocation'
 
 function featureMatchesLand(feature, key) {
   if (!key || !feature) return false
@@ -466,18 +467,24 @@ export default function MapPage({ editable = false }) {
     setMapCoords(text)
   }, [])
 
-  const locateUser = useCallback(() => {
-    if (!navigator.geolocation) return
+  const locateUser = useCallback(async () => {
     setLocating(true)
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        setUserLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude })
-        setLocating(false)
-      },
-      () => setLocating(false),
-      { enableHighAccuracy: true, timeout: 8000 },
-    )
-  }, [])
+    try {
+      const pos = await getUserPosition()
+      setUserLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude })
+    } catch (err) {
+      const key = geoErrorKey(err)
+      if (key === 'route.gps.insecure') {
+        const httpsUrl = httpsUpgradeUrl()
+        const goHttps = window.confirm(`${t(key)}\n\n${httpsUrl}`)
+        if (goHttps && httpsUrl) window.location.replace(httpsUrl)
+      } else {
+        window.alert(t(key))
+      }
+    } finally {
+      setLocating(false)
+    }
+  }, [t])
 
   const handlePickNearest = useCallback((props) => {
     if (!props) return
