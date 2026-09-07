@@ -4552,6 +4552,32 @@ body {
 
 .data-table { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
 
+.data-table .col-check {
+  width: 2.5rem;
+  text-align: center;
+  vertical-align: middle;
+  padding-left: 0.65rem;
+  padding-right: 0.35rem;
+}
+
+.data-table .col-check input[type='checkbox'] {
+  width: 1.05rem;
+  height: 1.05rem;
+  margin: 0;
+  cursor: pointer;
+  accent-color: #2d8cf0;
+  flex-shrink: 0;
+  vertical-align: middle;
+  /* Dark theme: native boxes can blend in — force a visible chrome */
+  appearance: auto;
+  -webkit-appearance: checkbox;
+  background: #fff;
+  border: 1.5px solid #94a3b8;
+  border-radius: 3px;
+  opacity: 1;
+  visibility: visible;
+}
+
 .data-table th { background: var(--surface2); padding: 0.75rem; text-align: left; font-weight: 600; }
 
 .data-table td { padding: 0.65rem 0.75rem; border-top: 1px solid var(--border); }

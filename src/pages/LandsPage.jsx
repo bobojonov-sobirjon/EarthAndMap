@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { categoriesApi, landsApi, mapApi, statsApi } from '../api/services'
+import { categoriesApi, landsApi, mapApi } from '../api/services'
 import { useAuth } from '../context/AuthContext'
 import {
   displayCategoryName,
@@ -37,6 +37,7 @@ export default function LandsPage() {
   const [yearFilter, setYearFilter] = useState('')
   const [selected, setSelected] = useState(null)
   const [selectedVersions, setSelectedVersions] = useState(null)
+  const [selectedIds, setSelectedIds] = useState(() => new Set())
   const [loading, setLoading] = useState(true)
 
   const researchCats = useMemo(() => filterResearchCategories(categories), [categories])
@@ -58,6 +59,7 @@ export default function LandsPage() {
       ])
       const all = landsRes.data.results || landsRes.data
       setLands(all.filter((l) => isResearchCategory(l.category_code)))
+      setSelectedIds(new Set())
       setCategories(catsRes.data.results || catsRes.data)
     } finally {
       setLoading(false)
@@ -134,26 +136,95 @@ export default function LandsPage() {
     setTimeout(() => load({ year: y }), 0)
   }
 
-  const exportCsv = () => {
-    const header = ['ID', 'Nomi', 'Turi', 'MFY', 'Maydon_ga', 'Uzunlik_km', 'Holati', 'Yangilangan']
-    const rows = lands.map((l) => [
-      l.public_id || l.id,
-      `"${(l.name || '').replace(/"/g, '""')}"`,
-      displayCategoryName(l.category_code || l),
-      l.mahalla || '',
-      l.area_ha ?? '',
-      l.length_km ?? '',
-      STATUS_LABELS[l.status] || l.status,
-      l.updated_at ? new Date(l.updated_at).toLocaleDateString('uz') : '',
-    ])
-    const csv = [header.join(','), ...rows.map((r) => r.join(','))].join('\n')
-    const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' })
+  const allSelected = lands.length > 0 && lands.every((l) => selectedIds.has(l.id))
+  const someSelected = lands.some((l) => selectedIds.has(l.id))
+
+  const toggleSelectAll = () => {
+    if (allSelected) {
+      setSelectedIds(new Set())
+      return
+    }
+    setSelectedIds(new Set(lands.map((l) => l.id)))
+  }
+
+  const toggleSelectOne = (id) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  const landToRow = (l) => [
+    l.public_id || l.id,
+    loc(l, 'name', lang) || l.name || '',
+    catName(l.category_code || l, t, lang) || displayCategoryName(l.category_code || l),
+    l.mahalla || '',
+    l.area_ha ?? '',
+    l.length_km ?? '',
+    t(`status.${l.status}`) || STATUS_LABELS[l.status] || l.status,
+    l.updated_at ? new Date(l.updated_at).toLocaleDateString('uz') : '',
+  ]
+
+  const exportHeader = ['ID', 'Nomi', 'Turi', 'MFY', 'Maydon_ga', 'Uzunlik_km', 'Holati', 'Yangilangan']
+
+  const downloadBlob = (blob, filename) => {
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `reyestr_${new Date().toISOString().slice(0, 10)}.csv`
+    a.download = filename
     a.click()
     URL.revokeObjectURL(url)
+  }
+
+  const exportCsv = (items = lands) => {
+    const rows = items.map((l) => {
+      const r = landToRow(l)
+      return [
+        r[0],
+        `"${String(r[1]).replace(/"/g, '""')}"`,
+        r[2],
+        r[3],
+        r[4],
+        r[5],
+        r[6],
+        r[7],
+      ]
+    })
+    const csv = [exportHeader.join(','), ...rows.map((r) => r.join(','))].join('\n')
+    const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' })
+    downloadBlob(blob, `reyestr_${new Date().toISOString().slice(0, 10)}.csv`)
+  }
+
+  const exportExcel = (items) => {
+    if (!items.length) {
+      alert(t('lands.exportEmpty'))
+      return
+    }
+    const escapeXml = (v) => String(v ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+    const rowXml = (cells) => (
+      `<Row>${cells.map((c) => `<Cell><Data ss:Type="String">${escapeXml(c)}</Data></Cell>`).join('')}</Row>`
+    )
+    const xml = `<?xml version="1.0"?>
+<?mso-application progid="Excel.Sheet"?>
+<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"
+ xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">
+<Worksheet ss:Name="Reyestr"><Table>
+${rowXml(exportHeader)}
+${items.map((l) => rowXml(landToRow(l))).join('\n')}
+</Table></Worksheet></Workbook>`
+    const blob = new Blob([xml], { type: 'application/vnd.ms-excel;charset=utf-8;' })
+    downloadBlob(blob, `reyestr_${new Date().toISOString().slice(0, 10)}.xls`)
+  }
+
+  const exportSelectedExcel = () => {
+    const items = lands.filter((l) => selectedIds.has(l.id))
+    exportExcel(items)
   }
 
   const exportPdfCard = async (land) => {
@@ -220,20 +291,22 @@ export default function LandsPage() {
         </div>
         <div className="header-actions">
           <button type="button" className="btn btn-ghost" onClick={resetFilters}>{t('common.clear')}</button>
-          <button type="button" className="btn btn-secondary" onClick={exportCsv}>{t('lands.exportCsv')}</button>
+          <button type="button" className="btn btn-secondary" onClick={() => exportCsv(lands)}>{t('lands.exportCsv')}</button>
           <button
             type="button"
             className="btn btn-secondary"
-            onClick={() => statsApi.exportExcel().then(({ data }) => {
-              const url = URL.createObjectURL(data)
-              const a = document.createElement('a')
-              a.href = url
-              a.download = 'reyestr.xlsx'
-              a.click()
-              URL.revokeObjectURL(url)
-            }).catch(() => exportCsv())}
+            disabled={!someSelected}
+            onClick={exportSelectedExcel}
+            title={someSelected ? undefined : t('lands.exportSelectHint')}
           >
-            {t('lands.exportXls')}
+            {t('lands.exportXlsSelected')}{someSelected ? ` (${selectedIds.size})` : ''}
+          </button>
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={() => exportExcel(lands)}
+          >
+            {t('lands.exportXlsAll')}
           </button>
         </div>
       </div>
@@ -303,6 +376,17 @@ export default function LandsPage() {
           <table className="data-table">
             <thead>
               <tr>
+                <th className="col-check">
+                  <input
+                    type="checkbox"
+                    checked={allSelected}
+                    ref={(el) => {
+                      if (el) el.indeterminate = someSelected && !allSelected
+                    }}
+                    onChange={toggleSelectAll}
+                    aria-label={t('lands.selectAll')}
+                  />
+                </th>
                 <th>ID</th>
                 <th>{t('lands.col.name')}</th>
                 <th>{t('lands.col.type')}</th>
@@ -316,7 +400,15 @@ export default function LandsPage() {
             </thead>
             <tbody>
               {lands.map((land) => (
-                <tr key={land.id} className={selected?.id === land.id ? 'is-selected' : ''}>
+                <tr key={land.id} className={selected?.id === land.id || selectedIds.has(land.id) ? 'is-selected' : ''}>
+                  <td className="col-check">
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.has(land.id)}
+                      onChange={() => toggleSelectOne(land.id)}
+                      aria-label={String(land.public_id || land.id)}
+                    />
+                  </td>
                   <td><code>{land.public_id || land.id}</code></td>
                   <td>
                     <span className="color-dot" style={{ background: land.category_color }} />
