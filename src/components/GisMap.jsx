@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import L from 'leaflet'
 import '@geoman-io/leaflet-geoman-free'
 import '@geoman-io/leaflet-geoman-free/dist/leaflet-geoman.css'
 import MapControls from './MapControls'
+import MfyHoverCard from './MfyHoverCard'
 import { clearLayer, clearLayerGroup } from '../map/layerCleanup'
 import { drawBoundaries, drawFeatureLayers, drawMahallaLayers } from '../map/drawLayers'
 import { BASEMAPS, MAP_MAX_ZOOM, MAP_MIN_ZOOM } from '../map/basemaps'
@@ -84,11 +85,13 @@ export default function GisMap(props) {
     mfyHighlight = '',
     heatByName = null,
     onSelectMfy = null,
+    mfyInsightByName = null,
   } = props
   const onSelect = props.onSelect || props.onSelect || props.onPick
   const selectMfy = onSelectMfy || props.onSelectMfy
   const { lang, t } = useI18n()
   const mapRef = useRef(null)
+  const wrapRef = useRef(null)
   const mapInstance = useRef(null)
   const layersRef = useRef({})
   const boundaryRef = useRef(null)
@@ -101,9 +104,34 @@ export default function GisMap(props) {
   const extraRef = useRef(null)
   const basemapLayersRef = useRef([])
   const drawHandlerRef = useRef(onDrawComplete)
+  const hoverRafRef = useRef(0)
+  const hoverPendingRef = useRef(null)
   const [ready, setReady] = useState(false)
+  const [mfyHover, setMfyHover] = useState(null)
 
   drawHandlerRef.current = onDrawComplete
+
+  const handleMfyHover = useCallback((payload) => {
+    if (!payload) {
+      if (hoverRafRef.current) cancelAnimationFrame(hoverRafRef.current)
+      hoverRafRef.current = 0
+      hoverPendingRef.current = null
+      setMfyHover(null)
+      return
+    }
+    hoverPendingRef.current = payload
+    if (hoverRafRef.current) return
+    hoverRafRef.current = requestAnimationFrame(() => {
+      hoverRafRef.current = 0
+      setMfyHover(hoverPendingRef.current)
+    })
+  }, [])
+
+  const hoverStats = (() => {
+    if (!mfyHover?.name || !mfyInsightByName) return null
+    const key = String(mfyHover.name).trim().toLowerCase()
+    return mfyInsightByName.get?.(key) || mfyInsightByName[key] || null
+  })()
 
   // —— Map init (bir marta) ——
   useEffect(() => {
@@ -228,6 +256,7 @@ export default function GisMap(props) {
       highlightName: mfyHighlight,
       heatByName,
       onSelectMfy: selectMfy,
+      onHoverMfy: handleMfyHover,
     })
 
     const hl = (mfyHighlight || '').trim().toLowerCase()
@@ -254,8 +283,9 @@ export default function GisMap(props) {
 
     return () => {
       clearLayer(map, mahallaRef)
+      setMfyHover(null)
     }
-  }, [mahallas, ready, visibleLayers, lang, mfyHighlight, heatByName, selectMfy])
+  }, [mahallas, ready, visibleLayers, lang, mfyHighlight, heatByName, selectMfy, handleMfyHover])
 
   // —— Dinamik obyektlar / markerlar ——
   useEffect(() => {
@@ -386,7 +416,7 @@ export default function GisMap(props) {
   }, [userLocation, routes, ready])
 
   return (
-    <div className="gis-map-wrap">
+    <div className="gis-map-wrap" ref={wrapRef}>
       <div ref={mapRef} className="gis-map" />
       <MapControls
         map={ready ? mapInstance.current : null}
@@ -401,6 +431,8 @@ export default function GisMap(props) {
         splitOn={props.splitOn}
         onToggleSplit={props.onToggleSplit}
       />
+
+      <MfyHoverCard hover={mfyHover} stats={hoverStats} containerRef={wrapRef} />
 
       {loading && (
         <div className="map-status map-status-loading" role="status">

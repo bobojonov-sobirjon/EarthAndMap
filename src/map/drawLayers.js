@@ -338,6 +338,14 @@ const MFY_STROKE = '#f97316'
 const MFY_ACTIVE_STROKE = '#facc15'
 const MFY_ACTIVE_FILL = '#fbbf24'
 const MFY_DIM_STROKE = '#cbd5e1'
+const MFY_HOVER_STROKE = '#fde047'
+const MFY_HOVER_FILL = '#facc15'
+
+function applyMfyHoverVisual(lyr, on) {
+  const el = lyr.getElement?.()
+  if (!el) return
+  el.classList.toggle('map-mfy-layer--hover', on)
+}
 
 function mfyMaskLatLngs(geom) {
   const outer = [[90, -180], [90, 180], [-90, 180], [-90, -180]]
@@ -388,6 +396,7 @@ function featureCentroid(feature) {
 /**
  * MFY (mahalla) — polygon chiziq, markaz nuqta va nom (kadastr xaritasi uslubi).
  * highlightName berilganda: tanlangan MFY sariq kontur+fill, qolganlari xira.
+ * onHoverMfy — hover card uchun ({ feature, name, clientX, clientY } | null).
  */
 export function drawMahallaLayers({
   map,
@@ -400,6 +409,7 @@ export function drawMahallaLayers({
   highlightName = '',
   heatByName = null,
   onSelectMfy = null,
+  onHoverMfy = null,
 }) {
   clearLayer(map, mahallaRef)
   if (!map || !visible || !collection?.features?.length) return null
@@ -428,6 +438,7 @@ export function drawMahallaLayers({
   ensurePane('mahalla-mask', 350)
   ensurePane('mahalla', 360)
   ensurePane('mahalla-active', 370)
+  ensurePane('mahalla-hover', 380)
   ensurePane('mahalla-points', 525)
   ensurePane('mahalla-labels', 650)
   map.getPane('mahalla-labels').style.pointerEvents = 'none'
@@ -437,6 +448,24 @@ export function drawMahallaLayers({
   const labelLayers = []
   let polyLayer = null
   let activeLayer = null
+  let hoveredLayer = null
+  let leaveTimer = null
+
+  const clearHoverVisual = (lyr) => {
+    if (!lyr) return
+    lyr._mfyHovering = false
+    applyMfyHoverVisual(lyr, false)
+    if (lyr._mfyBaseStyle) {
+      lyr.setStyle(lyr._mfyBaseStyle)
+    }
+    if (lyr._mfyBasePane && lyr.options) {
+      // Pane qaytarish majburiy emas — bringToBack yetarli
+    }
+  }
+
+  const emitHover = (payload) => {
+    if (typeof onHoverMfy === 'function') onHoverMfy(payload)
+  }
 
   const heatFill = (name) => {
     if (!heatOn) return null
@@ -454,6 +483,109 @@ export function drawMahallaLayers({
     }
   }
 
+  const baseStyleFor = (feature, lyr) => {
+    const name = (feature.properties?.name || '')
+    const active = hl && name.toLowerCase() === hl
+    const heat = heatFill(name)
+    if (heat) {
+      return {
+        ...heat,
+        opacity: active ? 1 : 0.95,
+        fill: true,
+        interactive: true,
+        className: 'map-mfy-layer map-mfy-layer--heat',
+      }
+    }
+    if (focusOn && active) {
+      return {
+        color: MFY_ACTIVE_STROKE,
+        weight: Math.max(5.5, mfyLineWeight(map.getZoom(), true) + 3),
+        fill: true,
+        fillColor: MFY_ACTIVE_FILL,
+        fillOpacity: 0.34,
+        opacity: 1,
+        interactive: true,
+        className: 'map-mfy-layer map-mfy-layer--active',
+      }
+    }
+    if (focusOn) {
+      return {
+        color: MFY_DIM_STROKE,
+        weight: 1,
+        fill: false,
+        fillOpacity: 0,
+        opacity: 0.45,
+        interactive: true,
+        className: 'map-mfy-layer map-mfy-layer--dim',
+      }
+    }
+    return {
+      color: MFY_STROKE,
+      weight: mfyLineWeight(map.getZoom(), active),
+      fill: false,
+      fillOpacity: 0,
+      opacity: active ? 1 : 0.95,
+      interactive: true,
+      className: 'map-mfy-layer',
+    }
+  }
+
+  const bindHover = (feature, lyr) => {
+    const p = feature.properties || {}
+    const name = (p.name || '').trim()
+
+    lyr.on('mouseover', (e) => {
+      if (leaveTimer) {
+        clearTimeout(leaveTimer)
+        leaveTimer = null
+      }
+      if (hoveredLayer && hoveredLayer !== lyr) {
+        clearHoverVisual(hoveredLayer)
+      }
+      hoveredLayer = lyr
+      lyr._mfyHovering = true
+      lyr._mfyBaseStyle = baseStyleFor(feature, lyr)
+      applyMfyHoverVisual(lyr, true)
+      lyr.setStyle({
+        color: MFY_HOVER_STROKE,
+        weight: Math.max(4.5, mfyLineWeight(map.getZoom(), true) + 2.5),
+        fill: true,
+        fillColor: MFY_HOVER_FILL,
+        fillOpacity: heatOn ? Math.min(0.72, (lyr.options.fillOpacity || 0.4) + 0.18) : 0.32,
+        opacity: 1,
+      })
+      lyr.bringToFront?.()
+      const oe = e.originalEvent
+      emitHover({
+        name,
+        feature,
+        clientX: oe?.clientX ?? 0,
+        clientY: oe?.clientY ?? 0,
+      })
+    })
+
+    lyr.on('mousemove', (e) => {
+      if (!lyr._mfyHovering) return
+      const oe = e.originalEvent
+      emitHover({
+        name,
+        feature,
+        clientX: oe?.clientX ?? 0,
+        clientY: oe?.clientY ?? 0,
+      })
+    })
+
+    lyr.on('mouseout', () => {
+      leaveTimer = setTimeout(() => {
+        if (hoveredLayer === lyr) {
+          clearHoverVisual(lyr)
+          hoveredLayer = null
+          emitHover(null)
+        }
+      }, 40)
+    })
+  }
+
   const bindSelect = (feature, lyr) => {
     const p = feature.properties || {}
     const label = loc(p, 'name', lang) || p.name || ''
@@ -465,6 +597,7 @@ export function drawMahallaLayers({
       const name = (p.name || '').trim()
       if (name && onSelectMfy) onSelectMfy(name)
     })
+    bindHover(feature, lyr)
   }
 
   if (showAreas && areaFeatures.length) {
@@ -654,6 +787,7 @@ export function drawMahallaLayers({
     const showLabels = mfyLabelVisible(z)
     if (polyLayer && !heatOn && !focusOn) {
       polyLayer.eachLayer((lyr) => {
+        if (lyr._mfyHovering) return
         const name = (lyr.feature?.properties?.name || '').toLowerCase()
         const active = hl && name === hl
         lyr.setStyle({
@@ -667,6 +801,7 @@ export function drawMahallaLayers({
     }
     if (activeLayer) {
       activeLayer.eachLayer((lyr) => {
+        if (lyr._mfyHovering) return
         lyr.setStyle({
           color: MFY_ACTIVE_STROKE,
           weight: Math.max(5.5, mfyLineWeight(z, true) + 3),
@@ -688,7 +823,12 @@ export function drawMahallaLayers({
 
   repaint()
   map.on('zoomend', repaint)
-  group.on('remove', () => { map.off('zoomend', repaint) })
+  group.on('remove', () => {
+    map.off('zoomend', repaint)
+    if (leaveTimer) clearTimeout(leaveTimer)
+    if (hoveredLayer) clearHoverVisual(hoveredLayer)
+    emitHover(null)
+  })
 
   mahallaRef.current = group
   return group

@@ -552,6 +552,7 @@ export default function MapPage({ editable = false }) {
             mfyHighlight={mfyEnabled ? filters.mahalla : ''}
             heatByName={heatByName}
             onSelectMfy={mfyEnabled ? selectMfy : undefined}
+            mfyInsightByName={mfyEnabled ? mfyInsights?.byName : null}
             visibleLayers={visibleLayers}
             selectedId={selected?.id}
             onSelect={handleSelect}
