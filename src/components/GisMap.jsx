@@ -83,8 +83,10 @@ export default function GisMap(props) {
     onBasemapChange,
     mfyHighlight = '',
     heatByName = null,
+    onSelectMfy = null,
   } = props
   const onSelect = props.onSelect || props.onSelect || props.onPick
+  const selectMfy = onSelectMfy || props.onSelectMfy
   const { lang, t } = useI18n()
   const mapRef = useRef(null)
   const mapInstance = useRef(null)
@@ -225,6 +227,7 @@ export default function GisMap(props) {
       lang,
       highlightName: mfyHighlight,
       heatByName,
+      onSelectMfy: selectMfy,
     })
 
     const hl = (mfyHighlight || '').trim().toLowerCase()
@@ -252,7 +255,7 @@ export default function GisMap(props) {
     return () => {
       clearLayer(map, mahallaRef)
     }
-  }, [mahallas, ready, visibleLayers, lang, mfyHighlight, heatByName])
+  }, [mahallas, ready, visibleLayers, lang, mfyHighlight, heatByName, selectMfy])
 
   // —— Dinamik obyektlar / markerlar ——
   useEffect(() => {

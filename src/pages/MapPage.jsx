@@ -5,14 +5,17 @@ import GisMap from '../components/GisMap'
 import LandDetail from '../components/LandDetail'
 import LandForm from '../components/LandForm'
 import MapToolbar from '../components/MapToolbar'
-import MfyPassportCard from '../components/MfyPassportCard'
+import MfyAnalysisPanel from '../components/MfyAnalysisPanel'
+import MfyLegend from '../components/MfyLegend'
+import MfyOverviewMap from '../components/MfyOverviewMap'
+import MfyStatsBar from '../components/MfyStatsBar'
 import NearestRoutesPanel from '../components/NearestRoutesPanel'
 import SplitCompareView from '../components/SplitCompareView'
 import { useAuth } from '../context/AuthContext'
 import { landsApi, mapApi } from '../api/services'
 import { requestMapRefresh, useMapData } from '../hooks/useMapData'
 import { filterResearchCategories, isResearchCategory, ROAD_CLASS_LIST, WATER_CLASS_LIST, PARK_CLASS_LIST, roadLayerKey, waterLayerKey, parkLayerKey, parseTypeFilter, matchesTypeFilter } from '../constants/researchLayers'
-import { buildMfyInsightIndex, mfyPassport, DEFAULT_MONITORING_YEAR } from '../map/mfyInsights'
+import { buildMfyInsightIndex, featureBelongsToMfy, mfyPassport, DEFAULT_MONITORING_YEAR } from '../map/mfyInsights'
 import { useI18n } from '../i18n/I18nContext'
 import { apiError } from '../i18n/apiError'
 import client from '../api/client'
@@ -309,6 +312,11 @@ export default function MapPage({ editable = false }) {
     setVisibleLayers((prev) => applyCategoryVisibility(prev, category))
   }, [focusKey, urlCategory, layersInitialized])
 
+  const mfyInsights = useMemo(
+    () => buildMfyInsightIndex(features?.features || [], mahallaBoundaries),
+    [features, mahallaBoundaries],
+  )
+
   const filteredGeojson = useMemo(() => {
     if (focusKey && focusFeature?.geometry) {
       return { type: 'FeatureCollection', features: [focusFeature] }
@@ -324,15 +332,10 @@ export default function MapPage({ editable = false }) {
         || f.properties?.public_id?.toLowerCase().includes(q),
       )
     }
-    // MFY: faqat mahalla maydoni to'ldirilgan obyektlarni filtrlash.
-    // Bog'/qabristonda mahalla bo'sh — ular qatlam orqali ko'rinadi.
+    // MFY fokussi: faqat tanlangan MFY ichidagi obyektlar (atribut yoki centroid PIP)
     if (filters.mahalla) {
-      const want = filters.mahalla.toLowerCase()
-      list = list.filter((f) => {
-        const m = (f.properties?.mahalla || '').trim()
-        if (!m) return true
-        return m.toLowerCase() === want
-      })
+      const passportRow = mfyPassport(mfyInsights, filters.mahalla)
+      list = list.filter((f) => featureBelongsToMfy(f, passportRow || null, filters.mahalla))
     }
     // Yo'l / istirohat pastki turi: boshqa qatlamlar yashirilmasin.
     if (filters.category) {
@@ -356,18 +359,12 @@ export default function MapPage({ editable = false }) {
       }
     }
     return { ...features, features: list }
-  }, [features, filters.search, filters.mahalla, filters.category, filters.year, focusKey, focusFeature])
-
-  const mfyInsights = useMemo(
-    () => buildMfyInsightIndex(features?.features || [], mahallaBoundaries),
-    [features, mahallaBoundaries],
-  )
+  }, [features, filters.search, filters.mahalla, filters.category, filters.year, focusKey, focusFeature, mfyInsights])
 
   const heatByName = useMemo(() => {
     if (!heatmapOn || !mfyEnabled) return null
     const map = {}
     mfyInsights.rows.forEach((r) => {
-      // Zichlik: maydon birligiga obyekt (kam = past, ko'p = yuqori)
       map[r.name.toLowerCase()] = r.heat
     })
     return map
@@ -377,6 +374,25 @@ export default function MapPage({ editable = false }) {
     () => (filters.mahalla ? mfyPassport(mfyInsights, filters.mahalla) : null),
     [filters.mahalla, mfyInsights],
   )
+
+  const clearMfy = useCallback(() => {
+    setFilters((f) => ({ ...f, mahalla: '' }))
+    setSelected(null)
+  }, [])
+
+  const selectMfy = useCallback((name) => {
+    if (!name) return
+    setHeatmapOn(false)
+    setFilters((f) => ({ ...f, mahalla: name }))
+  }, [])
+
+  const handlePickMfyObject = useCallback((item) => {
+    const props = item?.feature?.properties
+    if (props) {
+      setSelected(props)
+      setShowForm(false)
+    }
+  }, [])
 
   const handleToggleLayer = (code) => {
     setVisibleLayers((prev) => {
@@ -514,6 +530,7 @@ export default function MapPage({ editable = false }) {
             mahallas={mfyEnabled ? mahallaBoundaries : null}
             mfyHighlight={mfyEnabled ? filters.mahalla : ''}
             heatByName={heatByName}
+            onSelectMfy={mfyEnabled ? selectMfy : undefined}
             visibleLayers={visibleLayers}
             selectedId={selected?.id}
             onSelect={handleSelect}
@@ -574,10 +591,20 @@ export default function MapPage({ editable = false }) {
         )}
 
         {passport && !splitOn && mfyEnabled && (
-          <MfyPassportCard
-            passport={passport}
-            onClose={() => setFilters((f) => ({ ...f, mahalla: '' }))}
-          />
+          <>
+            <MfyAnalysisPanel
+              passport={passport}
+              onClose={clearMfy}
+              onBack={clearMfy}
+              onPickObject={handlePickMfyObject}
+            />
+            <MfyOverviewMap
+              cityBoundary={boundaries}
+              mfyFeature={passport.feature}
+            />
+            <MfyLegend />
+            <MfyStatsBar passport={passport} />
+          </>
         )}
 
         {!splitOn && !mfyEnabled && !focusKey && (
@@ -677,17 +704,21 @@ export default function MapPage({ editable = false }) {
           </div>
         )}
 
-        <footer className="map-bottom-bar">
-          <div className="map-bottom-bar__left">
-            <span>© {new Date().getFullYear()} {t('map.copyright')}</span>
-            <span className="map-bottom-bar__sep">·</span>
-            <span>{t('map.sources')}</span>
-          </div>
-          <div className="map-bottom-bar__right">
-            <span className="map-scale-hint">0 — 3 km</span>
-            <span className="map-bottom-bar__sep">|</span>
-            <span>{mapCoords}</span>
-          </div>
+        <footer className={`map-bottom-bar${passport && mfyEnabled ? ' map-bottom-bar--mfy' : ''}`}>
+          {!(passport && mfyEnabled) && (
+            <>
+              <div className="map-bottom-bar__left">
+                <span>© {new Date().getFullYear()} {t('map.copyright')}</span>
+                <span className="map-bottom-bar__sep">·</span>
+                <span>{t('map.sources')}</span>
+              </div>
+              <div className="map-bottom-bar__right">
+                <span className="map-scale-hint">0 — 3 km</span>
+                <span className="map-bottom-bar__sep">|</span>
+                <span>{mapCoords}</span>
+              </div>
+            </>
+          )}
         </footer>
       </div>
     </div>

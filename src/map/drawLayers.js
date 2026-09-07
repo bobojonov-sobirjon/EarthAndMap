@@ -334,6 +334,9 @@ export function drawBoundaries({
 
 const MFY_COLOR = '#ea580c'
 const MFY_STROKE = '#f97316'
+const MFY_ACTIVE_STROKE = '#facc15'
+const MFY_ACTIVE_FILL = '#fde047'
+const MFY_DIM_STROKE = '#94a3b8'
 
 function mfyLineWeight(zoom, active) {
   const z = zoom || 13
@@ -367,6 +370,7 @@ function featureCentroid(feature) {
 
 /**
  * MFY (mahalla) — polygon chiziq, markaz nuqta va nom (kadastr xaritasi uslubi).
+ * highlightName berilganda: tanlangan MFY sariq kontur+fill, qolganlari xira.
  */
 export function drawMahallaLayers({
   map,
@@ -378,12 +382,14 @@ export function drawMahallaLayers({
   lang = 'uz',
   highlightName = '',
   heatByName = null,
+  onSelectMfy = null,
 }) {
   clearLayer(map, mahallaRef)
   if (!map || !visible || !collection?.features?.length) return null
   if (!showAreas && !showPoints) return null
 
   const heatOn = heatByName && typeof heatByName === 'object'
+  const focusOn = Boolean((highlightName || '').trim()) && !heatOn
   const areaFeatures = collection.features.filter((f) => {
     const kind = f.properties?.kind
     if (kind === 'point') return false
@@ -402,8 +408,8 @@ export function drawMahallaLayers({
     if (!map.getPane(name)) map.createPane(name)
     map.getPane(name).style.zIndex = String(z)
   }
-  // overlayPane=400; basemap labels~450 — MFY ular ustida bo'lsin
   ensurePane('mahalla', 520)
+  ensurePane('mahalla-active', 522)
   ensurePane('mahalla-points', 525)
   ensurePane('mahalla-labels', 530)
   map.getPane('mahalla-labels').style.pointerEvents = 'none'
@@ -412,12 +418,12 @@ export function drawMahallaLayers({
   const pointLayers = []
   const labelLayers = []
   let polyLayer = null
+  let activeLayer = null
 
   const heatFill = (name) => {
     if (!heatOn) return null
     const key = (name || '').toLowerCase()
     const t = heatByName[key]
-    // 0 = kam (sariq), 1 = ko'p / eng zich (qizil)
     const x = t == null ? 0 : Math.max(0, Math.min(1, Number(t) || 0))
     const r = 255
     const g = Math.round(235 - x * 210)
@@ -430,9 +436,29 @@ export function drawMahallaLayers({
     }
   }
 
+  const bindSelect = (feature, lyr) => {
+    const p = feature.properties || {}
+    const label = loc(p, 'name', lang) || p.name || ''
+    const heat = heatOn ? heatByName[(p.name || '').toLowerCase()] : null
+    const heatTxt = heat != null ? `<br/>Zichlik: ${Math.round(Number(heat) * 100)}%` : ''
+    lyr.bindPopup(`<strong>${esc(label)}</strong><br/>MFY${heatTxt}`)
+    lyr.on('click', (e) => {
+      L.DomEvent.stopPropagation(e)
+      const name = (p.name || '').trim()
+      if (name && onSelectMfy) onSelectMfy(name)
+    })
+  }
+
   if (showAreas && areaFeatures.length) {
+    const dimFeatures = focusOn
+      ? areaFeatures.filter((f) => (f.properties?.name || '').toLowerCase() !== hl)
+      : areaFeatures
+    const activeFeatures = focusOn
+      ? areaFeatures.filter((f) => (f.properties?.name || '').toLowerCase() === hl)
+      : []
+
     polyLayer = L.geoJSON(
-      { type: 'FeatureCollection', features: areaFeatures },
+      { type: 'FeatureCollection', features: dimFeatures },
       {
         pane: 'mahalla',
         style: (feature) => {
@@ -448,6 +474,18 @@ export function drawMahallaLayers({
               className: 'map-mfy-layer map-mfy-layer--heat',
             }
           }
+          if (focusOn) {
+            return {
+              color: MFY_DIM_STROKE,
+              weight: 1.2,
+              fill: true,
+              fillColor: '#64748b',
+              fillOpacity: 0.08,
+              opacity: 0.35,
+              interactive: true,
+              className: 'map-mfy-layer map-mfy-layer--dim',
+            }
+          }
           return {
             color: MFY_STROKE,
             weight: mfyLineWeight(map.getZoom(), active),
@@ -459,20 +497,40 @@ export function drawMahallaLayers({
           }
         },
         onEachFeature: (feature, lyr) => {
-          const p = feature.properties || {}
-          const label = loc(p, 'name', lang) || p.name || ''
-          const heat = heatOn ? heatByName[(p.name || '').toLowerCase()] : null
-          const heatTxt = heat != null ? `<br/>Zichlik: ${Math.round(Number(heat) * 100)}%` : ''
-          lyr.bindPopup(`<strong>${esc(label)}</strong><br/>MFY${heatTxt}`)
+          bindSelect(feature, lyr)
           if (!heatOn) lyr.bringToBack?.()
           else lyr.bringToFront?.()
         },
       },
     )
     group.addLayer(polyLayer)
+
+    if (activeFeatures.length) {
+      activeLayer = L.geoJSON(
+        { type: 'FeatureCollection', features: activeFeatures },
+        {
+          pane: 'mahalla-active',
+          style: () => ({
+            color: MFY_ACTIVE_STROKE,
+            weight: Math.max(4.5, mfyLineWeight(map.getZoom(), true) + 2),
+            fill: true,
+            fillColor: MFY_ACTIVE_FILL,
+            fillOpacity: 0.28,
+            opacity: 1,
+            interactive: true,
+            className: 'map-mfy-layer map-mfy-layer--active',
+          }),
+          onEachFeature: (feature, lyr) => {
+            bindSelect(feature, lyr)
+            lyr.bringToFront?.()
+          },
+        },
+      )
+      group.addLayer(activeLayer)
+    }
   }
 
-  if (showPoints) {
+  if (showPoints && !focusOn) {
     const markerFeatures = pointFeatures.length
       ? pointFeatures
       : areaFeatures.map((f) => {
@@ -498,21 +556,26 @@ export function drawMahallaLayers({
         radius: mfyPointRadius(map.getZoom(), active),
         color: '#ffffff',
         weight: active ? 2.5 : 1.8,
-        fillColor: MFY_COLOR,
-        fillOpacity: 1,
-        opacity: 1,
+        fillColor: active ? MFY_ACTIVE_STROKE : MFY_COLOR,
+        fillOpacity: focusOn && !active ? 0.25 : 1,
+        opacity: focusOn && !active ? 0.3 : 1,
         interactive: true,
         className: 'map-mfy-point',
       })
       point.feature = feature
       point._mfyActive = active
       point.bindPopup(`<strong>${esc(label)}</strong><br/>MFY`)
+      point.on('click', (e) => {
+        L.DomEvent.stopPropagation(e)
+        const n = (p.name || '').trim()
+        if (n && onSelectMfy) onSelectMfy(n)
+      })
       point.addTo(group)
       pointLayers.push(point)
     })
   }
 
-  if (showAreas || showPoints) {
+  if ((showAreas || showPoints) && !focusOn) {
     const labelFeatures = areaFeatures.length ? areaFeatures : pointFeatures
     labelFeatures.forEach((feature) => {
       const p = feature.properties || {}
@@ -532,12 +595,33 @@ export function drawMahallaLayers({
         .addTo(group)
       labelLayers.push(tip)
     })
+  } else if (focusOn && showAreas) {
+    const active = areaFeatures.find((f) => (f.properties?.name || '').toLowerCase() === hl)
+    if (active) {
+      const p = active.properties || {}
+      const label = loc(p, 'name', lang) || p.name || ''
+      const center = featureCentroid(active)
+      if (label && center) {
+        const tip = L.tooltip({
+          permanent: true,
+          direction: 'center',
+          offset: [0, 0],
+          className: 'map-mfy-label map-mfy-label--active',
+          opacity: 1,
+          pane: 'mahalla-labels',
+        })
+          .setContent(esc(label))
+          .setLatLng(center)
+          .addTo(group)
+        labelLayers.push(tip)
+      }
+    }
   }
 
   const repaint = () => {
     const z = map.getZoom()
     const showLabels = mfyLabelVisible(z)
-    if (polyLayer && !heatOn) {
+    if (polyLayer && !heatOn && !focusOn) {
       polyLayer.eachLayer((lyr) => {
         const name = (lyr.feature?.properties?.name || '').toLowerCase()
         const active = hl && name === hl
@@ -550,12 +634,24 @@ export function drawMahallaLayers({
         })
       })
     }
+    if (activeLayer) {
+      activeLayer.eachLayer((lyr) => {
+        lyr.setStyle({
+          color: MFY_ACTIVE_STROKE,
+          weight: Math.max(4.5, mfyLineWeight(z, true) + 2),
+          fill: true,
+          fillColor: MFY_ACTIVE_FILL,
+          fillOpacity: 0.28,
+          opacity: 1,
+        })
+      })
+    }
     pointLayers.forEach((pt) => {
       pt.setRadius(mfyPointRadius(z, pt._mfyActive))
     })
     labelLayers.forEach((tip) => {
       const el = tip.getElement?.()
-      if (el) el.style.display = showLabels ? '' : 'none'
+      if (el) el.style.display = showLabels || focusOn ? '' : 'none'
     })
   }
 

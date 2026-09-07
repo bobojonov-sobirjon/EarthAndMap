@@ -1,4 +1,4 @@
-/** MFY tahlil, heatmap va yillar bo'yicha demo-filtr. */
+/** MFY tahlil, heatmap, spatial filter va pasport statistikasi. */
 
 export const YEAR_SCALE = {
   2010: 0.62,
@@ -16,6 +16,9 @@ export const YEAR_SCALE = {
 export const TIMELINE_YEARS = [2018, 2020, 2022, 2024, 2026]
 
 export const DEFAULT_MONITORING_YEAR = 2026
+
+/** Tor ko‘chalar / mahalliy (III + piyoda). */
+const ROAD_NARROW = new Set(['mahalliy', 'piyoda'])
 
 function ringContains(ring, lng, lat) {
   let inside = false
@@ -92,9 +95,67 @@ function polygonAreaHa(geom) {
     }
     sum += Math.abs(a) / 2
   })
-  // rough deg² → m² at ~39.7°N
   const m2 = sum * 111320 * 111320 * Math.cos((39.77 * Math.PI) / 180)
   return m2 / 10000
+}
+
+function featureAreaHa(feature) {
+  const p = feature?.properties || {}
+  const fromProp = Number(p.area_ha)
+  if (Number.isFinite(fromProp) && fromProp > 0) return fromProp
+  const sqm = Number(p.area_sqm)
+  if (Number.isFinite(sqm) && sqm > 0) return sqm / 10000
+  if (feature?.geometry?.type === 'Polygon' || feature?.geometry?.type === 'MultiPolygon') {
+    return polygonAreaHa(feature.geometry)
+  }
+  return 0
+}
+
+function featureLengthKm(feature) {
+  const p = feature?.properties || {}
+  const km = Number(p.length_km)
+  if (Number.isFinite(km) && km > 0) return km
+  const m = Number(p.length_m)
+  if (Number.isFinite(m) && m > 0) return m / 1000
+  return 0
+}
+
+function emptyRow(name, feature) {
+  return {
+    name,
+    feature,
+    areaHa: polygonAreaHa(feature?.geometry),
+    total: 0,
+    parks: 0,
+    cemeteries: 0,
+    other: 0,
+    roadKm: 0,
+    streetKm: 0,
+    ariqKm: 0,
+    kanalKm: 0,
+    canalKm: 0,
+    waterKm: 0,
+    cemeteryList: [],
+    parkList: [],
+    otherList: [],
+    roadList: [],
+    streetList: [],
+    ariqList: [],
+    kanalList: [],
+  }
+}
+
+function itemFromFeature(feature) {
+  const p = feature?.properties || {}
+  return {
+    id: p.id ?? feature?.id,
+    public_id: p.public_id || '',
+    name: p.name || p.public_id || '—',
+    areaHa: Math.round(featureAreaHa(feature) * 100) / 100,
+    lengthKm: Math.round(featureLengthKm(feature) * 1000) / 1000,
+    road_class: p.road_class || '',
+    feature,
+  }
 }
 
 export function hashUnit(id) {
@@ -102,7 +163,6 @@ export function hashUnit(id) {
   return ((n * 2654435761) >>> 0) / 4294967295
 }
 
-/** ObjectVersion yo'q bo'lsa — yil bo'yicha deterministic "o'sish" namoyishi. */
 export function featureVisibleInYear(feature, year) {
   if (!year) return true
   const y = Number(year)
@@ -124,8 +184,35 @@ function catKey(code) {
   return code || ''
 }
 
+function findMfyRow(byName, feature) {
+  const p = feature?.properties || {}
+  const mName = (p.mahalla || '').trim().toLowerCase()
+  if (mName && byName.has(mName)) return byName.get(mName)
+  const c = featureCentroidLngLat(feature)
+  if (!c) return null
+  for (const r of byName.values()) {
+    if (pointInGeom(r.feature.geometry, c.lng, c.lat)) return r
+  }
+  return null
+}
+
+/** Obyekt tanlangan MFY ichidami (atribut yoki centroid PIP). */
+export function featureBelongsToMfy(feature, mfyRowOrGeom, mfyName = '') {
+  if (!feature) return false
+  const want = String(mfyName || mfyRowOrGeom?.name || '').trim().toLowerCase()
+  const mAttr = (feature.properties?.mahalla || '').trim().toLowerCase()
+  if (want && mAttr && mAttr === want) return true
+
+  const geom = mfyRowOrGeom?.feature?.geometry || mfyRowOrGeom?.geometry || mfyRowOrGeom
+  if (!geom || !geom.type) return Boolean(want && mAttr && mAttr === want)
+
+  const c = featureCentroidLngLat(feature)
+  if (!c) return false
+  return pointInGeom(geom, c.lng, c.lat)
+}
+
 /**
- * MFY bo'yicha obyektlar statistikasi (heatmap + passport).
+ * MFY bo'yicha obyektlar statistikasi (heatmap + tahlil paneli).
  */
 export function buildMfyInsightIndex(features = [], mahallaCollection) {
   const areas = (mahallaCollection?.features || []).filter((f) => f.properties?.kind !== 'point')
@@ -133,56 +220,70 @@ export function buildMfyInsightIndex(features = [], mahallaCollection) {
   areas.forEach((f) => {
     const name = (f.properties?.name || '').trim()
     if (!name) return
-    byName.set(name.toLowerCase(), {
-      name,
-      feature: f,
-      areaHa: polygonAreaHa(f.geometry),
-      total: 0,
-      parks: 0,
-      cemeteries: 0,
-      roadKm: 0,
-      canalKm: 0,
-      waterKm: 0,
-    })
+    byName.set(name.toLowerCase(), emptyRow(name, f))
   })
 
-  const list = features || []
-  list.forEach((f) => {
+  ;(features || []).forEach((f) => {
     const p = f.properties || {}
     const code = catKey(p.category_code)
-    let row = null
-    const mName = (p.mahalla || '').trim().toLowerCase()
-    if (mName && byName.has(mName)) row = byName.get(mName)
-    if (!row) {
-      const c = featureCentroidLngLat(f)
-      if (c) {
-        for (const r of byName.values()) {
-          if (pointInGeom(r.feature.geometry, c.lng, c.lat)) {
-            row = r
-            break
-          }
-        }
-      }
-    }
+    const row = findMfyRow(byName, f)
     if (!row) return
+
     row.total += 1
-    const lenKm = Number(p.length_km) || (Number(p.length_m) ? Number(p.length_m) / 1000 : 0)
-    if (code === 'istirohat') row.parks += 1
-    else if (code === 'qabriston') row.cemeteries += 1
-    else if (code === 'yollar') row.roadKm += lenKm
-    else if (code === 'suv') {
+    const lenKm = featureLengthKm(f)
+    const item = itemFromFeature(f)
+    const cls = (p.road_class || '').toLowerCase()
+
+    if (code === 'istirohat') {
+      row.parks += 1
+      row.parkList.push(item)
+      return
+    }
+    if (code === 'qabriston') {
+      row.cemeteries += 1
+      row.cemeteryList.push(item)
+      return
+    }
+    if (code === 'yollar') {
+      if (ROAD_NARROW.has(cls)) {
+        row.streetKm += lenKm
+        row.streetList.push(item)
+      } else {
+        row.roadKm += lenKm
+        row.roadList.push(item)
+      }
+      return
+    }
+    if (code === 'suv') {
+      if (cls === 'ariq') {
+        row.ariqKm += lenKm
+        row.ariqList.push(item)
+      } else {
+        row.kanalKm += lenKm
+        row.kanalList.push(item)
+      }
       row.canalKm += lenKm
       row.waterKm += lenKm
+      return
     }
+    row.other += 1
+    row.otherList.push(item)
   })
 
+  const round3 = (n) => Math.round(n * 1000) / 1000
   const rows = [...byName.values()].map((r) => ({
     ...r,
-    roadKm: Math.round(r.roadKm * 1000) / 1000,
-    canalKm: Math.round(r.canalKm * 1000) / 1000,
-    waterKm: Math.round(r.waterKm * 1000) / 1000,
+    roadKm: round3(r.roadKm),
+    streetKm: round3(r.streetKm),
+    ariqKm: round3(r.ariqKm),
+    kanalKm: round3(r.kanalKm),
+    canalKm: round3(r.canalKm),
+    waterKm: round3(r.waterKm),
     areaHa: Math.round(r.areaHa * 100) / 100,
     density: r.areaHa > 0.01 ? r.total / r.areaHa : r.total,
+    cemeteryList: r.cemeteryList.sort((a, b) => a.name.localeCompare(b.name, 'uz')),
+    parkList: r.parkList.sort((a, b) => a.name.localeCompare(b.name, 'uz')),
+    otherList: r.otherList.sort((a, b) => a.name.localeCompare(b.name, 'uz')),
   }))
 
   const maxTotal = Math.max(1, ...rows.map((r) => r.total))
@@ -204,7 +305,6 @@ export function mfyPassport(insights, mahallaName) {
 /** Heat fill color (low → high). */
 export function heatColor(t) {
   const x = Math.max(0, Math.min(1, t))
-  // yellow → orange → red
   const r = Math.round(255)
   const g = Math.round(220 - x * 180)
   const b = Math.round(40 - x * 40)
