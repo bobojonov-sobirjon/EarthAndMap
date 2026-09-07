@@ -10679,7 +10679,7 @@ button.linkish {
 
 /* ===== MFY interactive analysis ===== */
 .map-mfy-layer--active {
-  filter: drop-shadow(0 0 2px rgba(250, 204, 21, 0.85));
+  filter: drop-shadow(0 0 3px rgba(253, 224, 71, 0.95));
 }
 .map-mfy-layer--dim {
   pointer-events: auto;
@@ -10928,8 +10928,8 @@ button.linkish {
   flex-shrink: 0;
 }
 .mfy-legend__swatch--mfy {
-  background: rgba(253, 224, 71, 0.35);
-  border: 2px solid #facc15;
+  background: rgba(234, 88, 12, 0.45);
+  border: 2px solid #fde047;
   height: 12px;
 }
 .mfy-legend__swatch--road { background: #f97316; }

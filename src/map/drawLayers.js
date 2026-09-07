@@ -334,8 +334,8 @@ export function drawBoundaries({
 
 const MFY_COLOR = '#ea580c'
 const MFY_STROKE = '#f97316'
-const MFY_ACTIVE_STROKE = '#facc15'
-const MFY_ACTIVE_FILL = '#fde047'
+const MFY_ACTIVE_STROKE = '#fde047'
+const MFY_ACTIVE_FILL = '#ea580c'
 const MFY_DIM_STROKE = '#94a3b8'
 
 function mfyLineWeight(zoom, active) {
@@ -512,10 +512,10 @@ export function drawMahallaLayers({
           pane: 'mahalla-active',
           style: () => ({
             color: MFY_ACTIVE_STROKE,
-            weight: Math.max(4.5, mfyLineWeight(map.getZoom(), true) + 2),
+            weight: Math.max(5, mfyLineWeight(map.getZoom(), true) + 2.5),
             fill: true,
             fillColor: MFY_ACTIVE_FILL,
-            fillOpacity: 0.28,
+            fillOpacity: 0.42,
             opacity: 1,
             interactive: true,
             className: 'map-mfy-layer map-mfy-layer--active',
@@ -638,10 +638,10 @@ export function drawMahallaLayers({
       activeLayer.eachLayer((lyr) => {
         lyr.setStyle({
           color: MFY_ACTIVE_STROKE,
-          weight: Math.max(4.5, mfyLineWeight(z, true) + 2),
+          weight: Math.max(5, mfyLineWeight(z, true) + 2.5),
           fill: true,
           fillColor: MFY_ACTIVE_FILL,
-          fillOpacity: 0.28,
+          fillOpacity: 0.42,
           opacity: 1,
         })
       })
