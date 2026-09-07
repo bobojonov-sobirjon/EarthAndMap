@@ -293,6 +293,7 @@
   "map.mfyAnal.statsBar": "Статистика МФЙ",
   "map.mfyAnal.legendTitle": "Условные знаки",
   "map.mfyAnal.legendMfy": "Граница выбранного МФЙ",
+  "map.mfyAnal.empty": "В этом МФЙ таких объектов нет",
   "map.compareLink": "Сравнение / swipe →",
   "route.title": "Ближайшие объекты",
   "route.max3": "Не более 3",

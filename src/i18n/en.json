@@ -293,6 +293,7 @@
   "map.mfyAnal.statsBar": "MFY statistics",
   "map.mfyAnal.legendTitle": "Legend",
   "map.mfyAnal.legendMfy": "Selected MFY boundary",
+  "map.mfyAnal.empty": "No such objects in this MFY",
   "map.compareLink": "Compare / swipe →",
   "route.title": "Nearest objects",
   "route.max3": "Up to 3",

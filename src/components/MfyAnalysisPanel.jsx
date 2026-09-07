@@ -20,9 +20,9 @@ function Accordion({ title, count, children, defaultOpen = false }) {
   )
 }
 
-function ItemList({ items, unit = 'ga', onPick }) {
+function ItemList({ items, unit = 'ga', onPick, emptyLabel }) {
   if (!items?.length) {
-    return <p className="mfy-acc__empty">—</p>
+    return <p className="mfy-acc__empty">{emptyLabel || '—'}</p>
   }
   return (
     <ol className="mfy-acc__list">
@@ -137,27 +137,62 @@ export default function MfyAnalysisPanel({ passport, onClose, onPickObject, onBa
             </ul>
 
             <div className="mfy-anal__accs">
-              <Accordion title={t('map.mfyAnal.cemeteries')} count={passport.cemeteries} defaultOpen>
-                <ItemList items={passport.cemeteryList} unit="ga" onPick={onPickObject} />
+              <Accordion title={t('map.mfyAnal.cemeteries')} count={passport.cemeteries} defaultOpen={(passport.cemeteries || 0) > 0}>
+                <ItemList
+                  items={passport.cemeteryList}
+                  unit="ga"
+                  onPick={onPickObject}
+                  emptyLabel={t('map.mfyAnal.empty')}
+                />
               </Accordion>
-              <Accordion title={t('map.mfyAnal.parks')} count={passport.parks} defaultOpen>
-                <ItemList items={passport.parkList} unit="ga" onPick={onPickObject} />
+              <Accordion title={t('map.mfyAnal.parks')} count={passport.parks} defaultOpen={(passport.parks || 0) > 0}>
+                <ItemList
+                  items={passport.parkList}
+                  unit="ga"
+                  onPick={onPickObject}
+                  emptyLabel={t('map.mfyAnal.empty')}
+                />
               </Accordion>
-              <Accordion title={t('map.mfyAnal.roads')} count={passport.roadList?.length}>
-                <ItemList items={passport.roadList} unit="km" onPick={onPickObject} />
+              <Accordion title={t('map.mfyAnal.roads')} count={passport.roadList?.length} defaultOpen={(passport.roadList?.length || 0) > 0}>
+                <ItemList
+                  items={passport.roadList}
+                  unit="km"
+                  onPick={onPickObject}
+                  emptyLabel={t('map.mfyAnal.empty')}
+                />
               </Accordion>
-              <Accordion title={t('map.mfyAnal.streets')} count={passport.streetList?.length}>
-                <ItemList items={passport.streetList} unit="km" onPick={onPickObject} />
+              <Accordion title={t('map.mfyAnal.streets')} count={passport.streetList?.length} defaultOpen={(passport.streetList?.length || 0) > 0}>
+                <ItemList
+                  items={passport.streetList}
+                  unit="km"
+                  onPick={onPickObject}
+                  emptyLabel={t('map.mfyAnal.empty')}
+                />
               </Accordion>
               <Accordion title={t('map.mfyAnal.ariqs')} count={passport.ariqList?.length}>
-                <ItemList items={passport.ariqList} unit="km" onPick={onPickObject} />
+                <ItemList
+                  items={passport.ariqList}
+                  unit="km"
+                  onPick={onPickObject}
+                  emptyLabel={t('map.mfyAnal.empty')}
+                />
               </Accordion>
               <Accordion title={t('map.mfyAnal.canals')} count={passport.kanalList?.length}>
-                <ItemList items={passport.kanalList} unit="km" onPick={onPickObject} />
+                <ItemList
+                  items={passport.kanalList}
+                  unit="km"
+                  onPick={onPickObject}
+                  emptyLabel={t('map.mfyAnal.empty')}
+                />
               </Accordion>
               {(passport.other > 0) && (
-                <Accordion title={t('map.mfyAnal.other')} count={passport.other}>
-                  <ItemList items={passport.otherList} unit="ga" onPick={onPickObject} />
+                <Accordion title={t('map.mfyAnal.other')} count={passport.other} defaultOpen>
+                  <ItemList
+                    items={passport.otherList}
+                    unit="ga"
+                    onPick={onPickObject}
+                    emptyLabel={t('map.mfyAnal.empty')}
+                  />
                 </Accordion>
               )}
             </div>
