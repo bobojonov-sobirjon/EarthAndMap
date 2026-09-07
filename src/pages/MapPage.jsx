@@ -444,6 +444,27 @@ export default function MapPage({ editable = false }) {
     })
   }
 
+  /** Barcha qatlamlarni bir yoʻla yoqish/oʻchirish (loop toggle emas — bolalar qayta yonmasin). */
+  const handleToggleAllLayers = useCallback((on) => {
+    setVisibleLayers((prev) => {
+      const next = { ...prev }
+      Object.keys(next).forEach((k) => { next[k] = on })
+      ;(boundaries?.features || []).forEach((f) => {
+        const code = f.properties?.code
+        if (code) next[`boundary:${code}`] = on
+      })
+      next.mfy_boundaries = on
+      next.mfy_points = on
+      ;(config?.categories || []).forEach((c) => {
+        if (c?.code) next[c.code] = on
+      })
+      ROAD_CLASS_LIST.forEach((r) => { next[roadLayerKey(r.id)] = on })
+      WATER_CLASS_LIST.forEach((w) => { next[waterLayerKey(w.id)] = on })
+      PARK_CLASS_LIST.forEach((p) => { next[parkLayerKey(p.id)] = on })
+      return next
+    })
+  }, [boundaries, config])
+
   const handleDrawComplete = (geom) => {
     setDrawGeometry(geom)
     setDrawMode(false)
@@ -636,6 +657,7 @@ export default function MapPage({ editable = false }) {
           visibleLayers={visibleLayers}
           onToggle={handleToggleLayer}
           onToggleGroup={handleToggleGroup}
+          onToggleAllLayers={handleToggleAllLayers}
           filters={filters}
           onFiltersChange={setFilters}
           onFiltersClear={() => setFilters({

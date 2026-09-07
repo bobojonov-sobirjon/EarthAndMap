@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { BASEMAP_IDS } from '../map/basemaps'
 import { DEFAULT_MONITORING_YEAR } from '../map/mfyInsights'
-import { buildLayerGroups, ROAD_CLASS_LIST, WATER_CLASS_LIST, roadLayerKey, waterLayerKey, buildTypeFilterOptions } from '../constants/researchLayers'
+import { buildLayerGroups, ROAD_CLASS_LIST, WATER_CLASS_LIST, PARK_CLASS_LIST, roadLayerKey, waterLayerKey, parkLayerKey, buildTypeFilterOptions } from '../constants/researchLayers'
 import { useI18n } from '../i18n/I18nContext'
 import { catName, loc } from '../i18n/loc'
 import PrettySelect from './PrettySelect'
@@ -126,6 +126,7 @@ export default function MapToolbar({
   visibleLayers,
   onToggle,
   onToggleGroup,
+  onToggleAllLayers,
   filters,
   onFiltersChange,
   onFiltersClear,
@@ -192,17 +193,16 @@ export default function MapToolbar({
       g.codes.forEach((c) => keys.push(c))
       if (g.key === 'yollar') ROAD_CLASS_LIST.forEach((r) => keys.push(roadLayerKey(r.id)))
       if (g.key === 'suv') WATER_CLASS_LIST.forEach((w) => keys.push(waterLayerKey(w.id)))
+      if (g.key === 'istirohat') PARK_CLASS_LIST.forEach((p) => keys.push(parkLayerKey(p.id)))
     })
     return keys
   }, [boundaries, groups])
 
-  const allLayersOn = layerKeys.every((k) => visibleLayers[k] !== false)
+  const allLayersOn = layerKeys.length > 0 && layerKeys.every((k) => visibleLayers[k] !== false)
 
   const toggleAllLayers = () => {
     const next = !allLayersOn
-    layerKeys.forEach((k) => {
-      if ((visibleLayers[k] !== false) !== next) onToggle(k)
-    })
+    if (onToggleAllLayers) onToggleAllLayers(next)
   }
 
   useEffect(() => {
