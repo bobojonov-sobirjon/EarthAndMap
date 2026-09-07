@@ -10679,15 +10679,36 @@ button.linkish {
 
 /* ===== MFY interactive analysis ===== */
 .map-mfy-layer--active {
-  filter: drop-shadow(0 0 3px rgba(253, 224, 71, 0.95));
+  filter: drop-shadow(0 0 4px rgba(250, 204, 21, 0.95));
 }
 .map-mfy-layer--dim {
   pointer-events: auto;
 }
 .map-mfy-label--active {
   font-weight: 800 !important;
-  color: #fef08a !important;
-  text-shadow: 0 1px 3px rgba(0,0,0,0.85);
+  font-size: 14px !important;
+  color: #ffffff !important;
+  text-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.95),
+    0 0 8px rgba(0, 0, 0, 0.75) !important;
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+}
+.map-mfy-label--neighbor {
+  font-weight: 600 !important;
+  font-size: 11px !important;
+  color: rgba(255, 255, 255, 0.88) !important;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9) !important;
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  opacity: 0.85 !important;
+}
+.mfy-legend__swatch--mfy {
+  background: rgba(251, 191, 36, 0.4);
+  border: 2px solid #facc15;
+  height: 12px;
 }
 
 .mfy-anal {
@@ -10926,11 +10947,6 @@ button.linkish {
   height: 10px;
   border-radius: 2px;
   flex-shrink: 0;
-}
-.mfy-legend__swatch--mfy {
-  background: rgba(234, 88, 12, 0.45);
-  border: 2px solid #fde047;
-  height: 12px;
 }
 .mfy-legend__swatch--road { background: #f97316; }
 .mfy-legend__swatch--street { background: #fb923c; height: 3px; }

@@ -334,9 +334,26 @@ export function drawBoundaries({
 
 const MFY_COLOR = '#ea580c'
 const MFY_STROKE = '#f97316'
-const MFY_ACTIVE_STROKE = '#fde047'
-const MFY_ACTIVE_FILL = '#ea580c'
-const MFY_DIM_STROKE = '#94a3b8'
+/** 2-rasmdagi tanlangan MFY: yorqin sariq kontur + shaffof sariq fill */
+const MFY_ACTIVE_STROKE = '#facc15'
+const MFY_ACTIVE_FILL = '#fbbf24'
+const MFY_DIM_STROKE = '#cbd5e1'
+
+function mfyMaskLatLngs(geom) {
+  const outer = [[90, -180], [90, 180], [-90, 180], [-90, -180]]
+  const holes = []
+  const pushRing = (ring) => {
+    if (!Array.isArray(ring) || ring.length < 3) return
+    holes.push(ring.map(([lng, lat]) => [lat, lng]))
+  }
+  if (!geom) return [outer]
+  if (geom.type === 'Polygon') {
+    pushRing(geom.coordinates?.[0])
+  } else if (geom.type === 'MultiPolygon') {
+    ;(geom.coordinates || []).forEach((poly) => pushRing(poly?.[0]))
+  }
+  return holes.length ? [outer, ...holes] : [outer]
+}
 
 function mfyLineWeight(zoom, active) {
   const z = zoom || 13
@@ -408,10 +425,11 @@ export function drawMahallaLayers({
     if (!map.getPane(name)) map.createPane(name)
     map.getPane(name).style.zIndex = String(z)
   }
-  ensurePane('mahalla', 520)
-  ensurePane('mahalla-active', 522)
+  ensurePane('mahalla-mask', 350)
+  ensurePane('mahalla', 360)
+  ensurePane('mahalla-active', 370)
   ensurePane('mahalla-points', 525)
-  ensurePane('mahalla-labels', 530)
+  ensurePane('mahalla-labels', 650)
   map.getPane('mahalla-labels').style.pointerEvents = 'none'
 
   const hl = (highlightName || '').trim().toLowerCase()
@@ -477,11 +495,10 @@ export function drawMahallaLayers({
           if (focusOn) {
             return {
               color: MFY_DIM_STROKE,
-              weight: 1.2,
-              fill: true,
-              fillColor: '#64748b',
-              fillOpacity: 0.08,
-              opacity: 0.35,
+              weight: 1,
+              fill: false,
+              fillOpacity: 0,
+              opacity: 0.45,
               interactive: true,
               className: 'map-mfy-layer map-mfy-layer--dim',
             }
@@ -506,16 +523,30 @@ export function drawMahallaLayers({
     group.addLayer(polyLayer)
 
     if (activeFeatures.length) {
+      // Atrofni qoraytirish — tanlangan MFY "oyna" sifatida ochiq qoladi
+      const maskGeom = activeFeatures[0]?.geometry
+      if (maskGeom) {
+        const mask = L.polygon(mfyMaskLatLngs(maskGeom), {
+          pane: 'mahalla-mask',
+          stroke: false,
+          fillColor: '#020617',
+          fillOpacity: 0.58,
+          interactive: false,
+          className: 'map-mfy-mask',
+        })
+        group.addLayer(mask)
+      }
+
       activeLayer = L.geoJSON(
         { type: 'FeatureCollection', features: activeFeatures },
         {
           pane: 'mahalla-active',
           style: () => ({
             color: MFY_ACTIVE_STROKE,
-            weight: Math.max(5, mfyLineWeight(map.getZoom(), true) + 2.5),
+            weight: Math.max(5.5, mfyLineWeight(map.getZoom(), true) + 3),
             fill: true,
             fillColor: MFY_ACTIVE_FILL,
-            fillOpacity: 0.42,
+            fillOpacity: 0.34,
             opacity: 1,
             interactive: true,
             className: 'map-mfy-layer map-mfy-layer--active',
@@ -596,26 +627,26 @@ export function drawMahallaLayers({
       labelLayers.push(tip)
     })
   } else if (focusOn && showAreas) {
-    const active = areaFeatures.find((f) => (f.properties?.name || '').toLowerCase() === hl)
-    if (active) {
-      const p = active.properties || {}
+    // Qo‘shni MFY nomlari (kichik) + tanlangan (katta oq)
+    areaFeatures.forEach((feature) => {
+      const p = feature.properties || {}
       const label = loc(p, 'name', lang) || p.name || ''
-      const center = featureCentroid(active)
-      if (label && center) {
-        const tip = L.tooltip({
-          permanent: true,
-          direction: 'center',
-          offset: [0, 0],
-          className: 'map-mfy-label map-mfy-label--active',
-          opacity: 1,
-          pane: 'mahalla-labels',
-        })
-          .setContent(esc(label))
-          .setLatLng(center)
-          .addTo(group)
-        labelLayers.push(tip)
-      }
-    }
+      const center = featureCentroid(feature)
+      if (!label || !center) return
+      const active = (p.name || '').toLowerCase() === hl
+      const tip = L.tooltip({
+        permanent: true,
+        direction: 'center',
+        offset: [0, 0],
+        className: active ? 'map-mfy-label map-mfy-label--active' : 'map-mfy-label map-mfy-label--neighbor',
+        opacity: 1,
+        pane: 'mahalla-labels',
+      })
+        .setContent(esc(label))
+        .setLatLng(center)
+        .addTo(group)
+      labelLayers.push(tip)
+    })
   }
 
   const repaint = () => {
@@ -638,10 +669,10 @@ export function drawMahallaLayers({
       activeLayer.eachLayer((lyr) => {
         lyr.setStyle({
           color: MFY_ACTIVE_STROKE,
-          weight: Math.max(5, mfyLineWeight(z, true) + 2.5),
+          weight: Math.max(5.5, mfyLineWeight(z, true) + 3),
           fill: true,
           fillColor: MFY_ACTIVE_FILL,
-          fillOpacity: 0.42,
+          fillOpacity: 0.34,
           opacity: 1,
         })
       })

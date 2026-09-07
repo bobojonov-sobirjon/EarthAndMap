@@ -74,10 +74,10 @@ export default function MfyOverviewMap({
     if (mfyFeature?.geometry) {
       const mfyLayer = L.geoJSON(mfyFeature, {
         style: {
-          color: '#fde047',
+          color: '#facc15',
           weight: 2.2,
-          fillColor: '#ea580c',
-          fillOpacity: 0.75,
+          fillColor: '#fbbf24',
+          fillOpacity: 0.7,
           opacity: 1,
         },
         interactive: false,
