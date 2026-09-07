@@ -140,6 +140,7 @@ export default function MapToolbar({
   const [layersOpen, setLayersOpen] = useState(false)
   const [moreOpen, setMoreOpen] = useState(false)
   const [suvOpen, setSuvOpen] = useState(false)
+  const [roadsOpen, setRoadsOpen] = useState(false)
   const groups = buildLayerGroups(categories)
   const yearList = useMemo(
     () => years.filter((y) => Number.isFinite(Number(y))).map(Number),
@@ -267,11 +268,12 @@ export default function MapToolbar({
               </>
             )}
             {groups.map((g) => {
-              if (g.key === 'yollar') return null
               const visible = g.codes.every((code) => visibleLayers[code] !== false)
               const isSuv = g.key === 'suv'
+              const isRoads = g.key === 'yollar'
+              const expanded = (isSuv && suvOpen) || (isRoads && roadsOpen)
               return (
-                <div key={g.key} className={`map-layers-group${isSuv && suvOpen ? ' is-open' : ''}`}>
+                <div key={g.key} className={`map-layers-group${expanded ? ' is-open' : ''}`}>
                   <LayerRow
                     label={t(`layer.${g.key}`)}
                     visible={visible}
@@ -280,10 +282,36 @@ export default function MapToolbar({
                       else g.codes.forEach((c) => onToggle(c))
                     }}
                     swatch={<LayerSwatch type={LAYER_ICONS[g.key]} color={g.color} />}
-                    expandable={isSuv}
-                    expanded={isSuv && suvOpen}
-                    onExpandToggle={isSuv ? () => setSuvOpen((v) => !v) : undefined}
+                    expandable={isSuv || isRoads}
+                    expanded={expanded}
+                    onExpandToggle={
+                      isSuv
+                        ? () => setSuvOpen((v) => !v)
+                        : isRoads
+                          ? () => setRoadsOpen((v) => !v)
+                          : undefined
+                    }
                   />
+                  {isRoads && (
+                    <div className={`map-layers-group__kids${roadsOpen ? ' is-open' : ''}`}>
+                      <div className="map-layers-group__kids-inner">
+                        {ROAD_CLASS_LIST.map((r) => {
+                          const key = roadLayerKey(r.id)
+                          const subOn = visible && visibleLayers[key] !== false
+                          return (
+                            <LayerRow
+                              key={key}
+                              label={t(`road.${r.id}`)}
+                              visible={subOn}
+                              onToggle={() => onToggle(key)}
+                              swatch={<LayerSwatch type="road" color={r.color} />}
+                              indent
+                            />
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )}
                   {isSuv && (
                     <div className={`map-layers-group__kids${suvOpen ? ' is-open' : ''}`}>
                       <div className="map-layers-group__kids-inner">
