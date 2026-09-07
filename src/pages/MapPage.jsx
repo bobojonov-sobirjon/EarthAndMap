@@ -383,6 +383,8 @@ export default function MapPage({ editable = false }) {
   const selectMfy = useCallback((name) => {
     if (!name) return
     setHeatmapOn(false)
+    setSelected(null)
+    setShowForm(false)
     setFilters((f) => ({ ...f, mahalla: name }))
   }, [])
 
@@ -682,7 +684,11 @@ export default function MapPage({ editable = false }) {
         )}
 
         {selected && !showForm && (
-          <div className="map-dock map-dock--left map-dock--detail">
+          <div
+            className={`map-dock map-dock--detail ${
+              passport && mfyEnabled && !splitOn ? 'map-dock--right map-dock--mfy-obj' : 'map-dock--left'
+            }`}
+          >
             <LandDetail
               land={selected}
               onClose={() => setSelected(null)}

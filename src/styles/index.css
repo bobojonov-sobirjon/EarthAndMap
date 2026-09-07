@@ -1184,6 +1184,17 @@ body {
 
 }
 
+/* MFY paneli ochiq: chapdagi land-detail yashirinadi (orqada ko‘rinib qolmasin) */
+.map-page--immersive:has(.mfy-anal) .map-dock--left.map-dock--detail {
+  display: none !important;
+}
+
+.map-dock--mfy-obj {
+  z-index: 1260;
+  top: 72px;
+  width: min(300px, calc(100vw - 48px));
+}
+
 .map-dock--right {
 
   top: 14px;
