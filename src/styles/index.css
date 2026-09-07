@@ -4086,7 +4086,7 @@ body {
   font-weight: 700;
   letter-spacing: 0.01em;
   line-height: 1.15;
-  padding: 0;
+  padding: 0.2rem 0.35rem;
   text-align: center;
   text-shadow:
     -1px -1px 0 #fff,
@@ -4098,10 +4098,16 @@ body {
   pointer-events: none;
 }
 
-/* Oddiy rejim: faqat kontur. Heatmapda CSS fill qo‘ymaymiz — Leaflet inline rangi ishlasin. */
-.leaflet-interactive.map-mfy-layer:not(.map-mfy-layer--heat):not(.map-mfy-layer--hover) {
-  fill: none !important;
-  fill-opacity: 0 !important;
+.leaflet-tooltip.map-mfy-label--interactive {
+  pointer-events: auto !important;
+  cursor: pointer;
+}
+
+/* SVG fill:none hoverni faqat chiziqda qoldiradi — deyarli shaffof fill + pointer-events */
+.leaflet-interactive.map-mfy-layer:not(.map-mfy-layer--heat):not(.map-mfy-layer--hover):not(.map-mfy-layer--active) {
+  fill: rgba(249, 115, 22, 0.001) !important;
+  fill-opacity: 1 !important;
+  pointer-events: all !important;
 }
 
 /* MFY hover — “ko‘tarilgan” polygon */
@@ -4118,10 +4124,12 @@ body {
   transform-origin: center;
   transition: filter 0.22s ease, transform 0.22s cubic-bezier(0.22, 1, 0.36, 1);
   cursor: pointer;
+  pointer-events: all !important;
 }
 
 .leaflet-interactive.map-mfy-layer {
   transition: filter 0.2s ease, transform 0.2s ease, stroke-width 0.2s ease;
+  pointer-events: all !important;
 }
 
 

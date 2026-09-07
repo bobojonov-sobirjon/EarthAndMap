@@ -441,7 +441,7 @@ export function drawMahallaLayers({
   ensurePane('mahalla-hover', 380)
   ensurePane('mahalla-points', 525)
   ensurePane('mahalla-labels', 650)
-  map.getPane('mahalla-labels').style.pointerEvents = 'none'
+  map.getPane('mahalla-labels').style.pointerEvents = 'auto'
 
   const hl = (highlightName || '').trim().toLowerCase()
   const pointLayers = []
@@ -458,14 +458,13 @@ export function drawMahallaLayers({
     if (lyr._mfyBaseStyle) {
       lyr.setStyle(lyr._mfyBaseStyle)
     }
-    if (lyr._mfyBasePane && lyr.options) {
-      // Pane qaytarish majburiy emas — bringToBack yetarli
-    }
   }
 
   const emitHover = (payload) => {
     if (typeof onHoverMfy === 'function') onHoverMfy(payload)
   }
+
+  const layersByName = new Map()
 
   const heatFill = (name) => {
     if (!heatOn) return null
@@ -483,7 +482,7 @@ export function drawMahallaLayers({
     }
   }
 
-  const baseStyleFor = (feature, lyr) => {
+  const baseStyleFor = (feature) => {
     const name = (feature.properties?.name || '')
     const active = hl && name.toLowerCase() === hl
     const heat = heatFill(name)
@@ -512,8 +511,10 @@ export function drawMahallaLayers({
       return {
         color: MFY_DIM_STROKE,
         weight: 1,
-        fill: false,
-        fillOpacity: 0,
+        /* fill kerak — SVG fill:none bo‘lsa hover faqat chiziqda ishlaydi */
+        fill: true,
+        fillColor: '#94a3b8',
+        fillOpacity: 0.001,
         opacity: 0.45,
         interactive: true,
         className: 'map-mfy-layer map-mfy-layer--dim',
@@ -522,29 +523,28 @@ export function drawMahallaLayers({
     return {
       color: MFY_STROKE,
       weight: mfyLineWeight(map.getZoom(), active),
-      fill: false,
-      fillOpacity: 0,
+      fill: true,
+      fillColor: MFY_STROKE,
+      fillOpacity: 0.001,
       opacity: active ? 1 : 0.95,
       interactive: true,
       className: 'map-mfy-layer',
     }
   }
 
-  const bindHover = (feature, lyr) => {
-    const p = feature.properties || {}
-    const name = (p.name || '').trim()
-
-    lyr.on('mouseover', (e) => {
-      if (leaveTimer) {
-        clearTimeout(leaveTimer)
-        leaveTimer = null
-      }
-      if (hoveredLayer && hoveredLayer !== lyr) {
-        clearHoverVisual(hoveredLayer)
-      }
-      hoveredLayer = lyr
+  const enterHover = (lyr, feature, clientX = 0, clientY = 0) => {
+    if (!lyr || !feature) return
+    if (leaveTimer) {
+      clearTimeout(leaveTimer)
+      leaveTimer = null
+    }
+    if (hoveredLayer && hoveredLayer !== lyr) {
+      clearHoverVisual(hoveredLayer)
+    }
+    hoveredLayer = lyr
+    if (!lyr._mfyHovering) {
       lyr._mfyHovering = true
-      lyr._mfyBaseStyle = baseStyleFor(feature, lyr)
+      lyr._mfyBaseStyle = baseStyleFor(feature)
       applyMfyHoverVisual(lyr, true)
       lyr.setStyle({
         color: MFY_HOVER_STROKE,
@@ -555,35 +555,86 @@ export function drawMahallaLayers({
         opacity: 1,
       })
       lyr.bringToFront?.()
-      const oe = e.originalEvent
-      emitHover({
-        name,
-        feature,
-        clientX: oe?.clientX ?? 0,
-        clientY: oe?.clientY ?? 0,
-      })
-    })
+    }
+    const name = (feature.properties?.name || '').trim()
+    emitHover({ name, feature, clientX, clientY })
+  }
 
+  const leaveHover = (lyr) => {
+    leaveTimer = setTimeout(() => {
+      if (hoveredLayer === lyr) {
+        clearHoverVisual(lyr)
+        hoveredLayer = null
+        emitHover(null)
+      }
+    }, 60)
+  }
+
+  const bindHover = (feature, lyr) => {
+    const key = (feature.properties?.name || '').trim().toLowerCase()
+    if (key) layersByName.set(key, { lyr, feature })
+
+    lyr.on('mouseover', (e) => {
+      const oe = e.originalEvent
+      enterHover(lyr, feature, oe?.clientX ?? 0, oe?.clientY ?? 0)
+    })
     lyr.on('mousemove', (e) => {
       if (!lyr._mfyHovering) return
       const oe = e.originalEvent
-      emitHover({
-        name,
-        feature,
-        clientX: oe?.clientX ?? 0,
-        clientY: oe?.clientY ?? 0,
-      })
+      enterHover(lyr, feature, oe?.clientX ?? 0, oe?.clientY ?? 0)
     })
+    lyr.on('mouseout', () => leaveHover(lyr))
+  }
 
-    lyr.on('mouseout', () => {
-      leaveTimer = setTimeout(() => {
-        if (hoveredLayer === lyr) {
-          clearHoverVisual(lyr)
-          hoveredLayer = null
-          emitHover(null)
+  const bindLabelHover = (feature, tip) => {
+    const key = (feature.properties?.name || '').trim().toLowerCase()
+    const wire = () => {
+      const el = tip.getElement?.()
+      if (!el || el._mfyHoverBound) return
+      el._mfyHoverBound = true
+      el.classList.add('map-mfy-label--interactive')
+      el.style.pointerEvents = 'auto'
+      el.style.cursor = 'pointer'
+
+      el.addEventListener('mouseenter', (e) => {
+        const row = layersByName.get(key)
+        if (row) enterHover(row.lyr, row.feature, e.clientX, e.clientY)
+        else {
+          // Polygon yo‘q (faqat point) — card baribir
+          emitHover({
+            name: (feature.properties?.name || '').trim(),
+            feature,
+            clientX: e.clientX,
+            clientY: e.clientY,
+          })
         }
-      }, 40)
-    })
+      })
+      el.addEventListener('mousemove', (e) => {
+        const row = layersByName.get(key)
+        if (row) enterHover(row.lyr, row.feature, e.clientX, e.clientY)
+        else {
+          emitHover({
+            name: (feature.properties?.name || '').trim(),
+            feature,
+            clientX: e.clientX,
+            clientY: e.clientY,
+          })
+        }
+      })
+      el.addEventListener('mouseleave', () => {
+        const row = layersByName.get(key)
+        if (row) leaveHover(row.lyr)
+        else emitHover(null)
+      })
+      el.addEventListener('click', (e) => {
+        e.stopPropagation()
+        const name = (feature.properties?.name || '').trim()
+        if (name && onSelectMfy) onSelectMfy(name)
+      })
+    }
+    tip.on('add', wire)
+    // allaqachon DOM da bo‘lsa
+    setTimeout(wire, 0)
   }
 
   const bindSelect = (feature, lyr) => {
@@ -629,8 +680,9 @@ export function drawMahallaLayers({
             return {
               color: MFY_DIM_STROKE,
               weight: 1,
-              fill: false,
-              fillOpacity: 0,
+              fill: true,
+              fillColor: '#94a3b8',
+              fillOpacity: 0.001,
               opacity: 0.45,
               interactive: true,
               className: 'map-mfy-layer map-mfy-layer--dim',
@@ -639,8 +691,9 @@ export function drawMahallaLayers({
           return {
             color: MFY_STROKE,
             weight: mfyLineWeight(map.getZoom(), active),
-            fill: false,
-            fillOpacity: 0,
+            fill: true,
+            fillColor: MFY_STROKE,
+            fillOpacity: 0.001,
             opacity: active ? 1 : 0.95,
             interactive: true,
             className: 'map-mfy-layer',
@@ -734,6 +787,21 @@ export function drawMahallaLayers({
         const n = (p.name || '').trim()
         if (n && onSelectMfy) onSelectMfy(n)
       })
+      // Nuqta / nom markazi: hover ham shu MFY ni ko‘taradi
+      point.on('mouseover', (e) => {
+        const row = layersByName.get(name)
+        const oe = e.originalEvent
+        if (row) enterHover(row.lyr, row.feature, oe?.clientX ?? 0, oe?.clientY ?? 0)
+      })
+      point.on('mousemove', (e) => {
+        const row = layersByName.get(name)
+        const oe = e.originalEvent
+        if (row) enterHover(row.lyr, row.feature, oe?.clientX ?? 0, oe?.clientY ?? 0)
+      })
+      point.on('mouseout', () => {
+        const row = layersByName.get(name)
+        if (row) leaveHover(row.lyr)
+      })
       point.addTo(group)
       pointLayers.push(point)
     })
@@ -750,13 +818,15 @@ export function drawMahallaLayers({
         permanent: true,
         direction: 'center',
         offset: showPoints ? [0, -12] : [0, 0],
-        className: 'map-mfy-label',
+        className: 'map-mfy-label map-mfy-label--interactive',
         opacity: 1,
         pane: 'mahalla-labels',
+        interactive: true,
       })
         .setContent(esc(label))
         .setLatLng(center)
         .addTo(group)
+      bindLabelHover(feature, tip)
       labelLayers.push(tip)
     })
   } else if (focusOn && showAreas) {
@@ -771,13 +841,17 @@ export function drawMahallaLayers({
         permanent: true,
         direction: 'center',
         offset: [0, 0],
-        className: active ? 'map-mfy-label map-mfy-label--active' : 'map-mfy-label map-mfy-label--neighbor',
+        className: active
+          ? 'map-mfy-label map-mfy-label--active map-mfy-label--interactive'
+          : 'map-mfy-label map-mfy-label--neighbor map-mfy-label--interactive',
         opacity: 1,
         pane: 'mahalla-labels',
+        interactive: true,
       })
         .setContent(esc(label))
         .setLatLng(center)
         .addTo(group)
+      bindLabelHover(feature, tip)
       labelLayers.push(tip)
     })
   }
@@ -793,8 +867,9 @@ export function drawMahallaLayers({
         lyr.setStyle({
           color: MFY_STROKE,
           weight: mfyLineWeight(z, active),
-          fill: false,
-          fillOpacity: 0,
+          fill: true,
+          fillColor: MFY_STROKE,
+          fillOpacity: 0.001,
           opacity: active ? 1 : 0.92,
         })
       })
