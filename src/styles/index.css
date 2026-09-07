@@ -10713,8 +10713,8 @@ button.linkish {
 
 .mfy-anal {
   position: absolute;
-  top: 64px;
-  left: 14px;
+  top: clamp(52px, 8vh, 72px);
+  left: clamp(8px, 1.2vw, 14px);
   z-index: 1250;
   width: min(340px, calc(100vw - 28px));
   max-height: calc(100% - 150px);
@@ -10959,12 +10959,14 @@ button.linkish {
   position: absolute;
   left: 50%;
   transform: translateX(-50%);
-  bottom: 12px;
+  bottom: clamp(8px, 1.5vh, 14px);
   z-index: 1260;
   width: min(1100px, calc(100vw - 24px));
   display: flex;
   gap: 0.4rem;
   overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
   padding: 0.45rem;
   background: rgba(15, 23, 42, 0.94);
   border: 1px solid rgba(148, 163, 184, 0.24);
@@ -11011,31 +11013,231 @@ button.linkish {
   overflow: hidden;
 }
 
+/* Desktop: chap panel ochiq bo‘lsa toolbar o‘ngga siljiydi */
 .map-page--immersive:has(.mfy-anal) .map-toolbar-wrap {
   left: min(360px, calc(100vw - 28px));
+  right: 12px;
+  transform: none;
+  width: auto;
+  display: flex;
+  justify-content: center;
 }
 .map-page--immersive:has(.mfy-anal) .map-nearest-fab {
   display: none;
 }
 
+/* —— Adaptive MFY / map blocks —— */
+@media (max-width: 1200px) {
+  .mfy-anal {
+    width: min(300px, calc(100vw - 24px));
+    top: 56px;
+    max-height: calc(100% - 140px);
+  }
+  .mfy-overview {
+    width: 180px;
+    height: 132px;
+    top: 64px;
+    right: 12px;
+  }
+  .mfy-legend {
+    left: 12px;
+    bottom: 78px;
+    width: min(200px, 28vw);
+  }
+  .mfy-stats-bar {
+    width: min(960px, calc(100vw - 20px));
+  }
+  .map-page--immersive:has(.mfy-anal) .map-toolbar-wrap {
+    left: min(320px, calc(100vw - 24px));
+  }
+}
+
 @media (max-width: 900px) {
   .mfy-anal {
     top: auto;
-    bottom: 96px;
-    left: 10px;
-    right: 10px;
+    left: 8px;
+    right: 8px;
+    bottom: calc(72px + env(safe-area-inset-bottom, 0px));
     width: auto;
-    max-height: 42vh;
+    max-height: min(48vh, 420px);
+    border-radius: 14px 14px 12px 12px;
+    z-index: 1280;
+  }
+  .mfy-anal__title-row h2 {
+    font-size: clamp(0.95rem, 3.6vw, 1.1rem);
+  }
+  .mfy-anal__kpis {
+    grid-template-columns: 1fr 1fr;
+    gap: 0.35rem;
+  }
+  .mfy-anal__sum {
+    grid-template-columns: 18px 1fr auto;
+    padding: 0.32rem 0.4rem;
+  }
+  .mfy-anal__sum-lab {
+    font-size: 0.74rem;
+  }
+
+  .mfy-overview {
+    top: 52px;
+    right: 8px;
+    width: clamp(112px, 28vw, 150px);
+    height: clamp(88px, 22vw, 118px);
+    border-radius: 10px;
+    z-index: 1240;
+  }
+
+  .mfy-legend {
+    display: none;
+  }
+
+  .mfy-stats-bar {
+    left: 8px;
+    right: 8px;
+    transform: none;
+    width: auto;
+    bottom: calc(8px + env(safe-area-inset-bottom, 0px));
+    gap: 0.3rem;
+    padding: 0.35rem;
+    border-radius: 12px;
+    z-index: 1270;
+  }
+  .mfy-stats-bar__card {
+    min-width: 76px;
+    padding: 0.32rem 0.42rem;
+    flex: 1 1 auto;
+  }
+  .mfy-stats-bar__card--wide {
+    min-width: min(120px, 40vw);
+    flex: 1.4 1 auto;
+  }
+  .mfy-stats-bar__card span {
+    font-size: 0.58rem;
+  }
+  .mfy-stats-bar__card b {
+    font-size: 0.74rem;
+  }
+
+  /* MFY ochiq: toolbar yuqoriga / markazga, panel bilan to‘qnashmasin */
+  .map-page--immersive:has(.mfy-anal) .map-toolbar-wrap {
+    left: 8px;
+    right: 8px;
+    bottom: auto;
+    top: 8px;
+    transform: none;
+    width: auto;
+    justify-content: flex-start;
+  }
+  .map-page--immersive:has(.mfy-anal) .map-toolbar {
+    width: 100%;
+    max-width: 100%;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+    gap: 4px;
+    padding: 4px 6px;
+  }
+  .map-page--immersive:has(.mfy-anal) .map-toolbar__filters {
+    flex-wrap: wrap;
+    width: 100%;
+  }
+  .map-page--immersive:has(.mfy-anal) .mfy-overview {
+    top: auto;
+    bottom: calc(72px + min(48vh, 420px) + 10px);
+  }
+
+  .map-toolbar-wrap {
+    left: 8px;
+    right: 8px;
+    transform: none;
+    width: auto;
+    bottom: calc(48px + env(safe-area-inset-bottom, 0px));
+  }
+  .map-toolbar {
+    width: 100%;
+    max-width: 100%;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  .map-toolbar-pop--layers,
+  .map-toolbar-pop--more {
+    left: 8px !important;
+    right: 8px !important;
+    width: auto !important;
+    max-width: none;
+    max-height: min(55vh, 420px);
+  }
+}
+
+@media (max-width: 600px) {
+  .mfy-anal {
+    bottom: calc(64px + env(safe-area-inset-bottom, 0px));
+    max-height: min(44vh, 360px);
+    padding: 0;
+  }
+  .mfy-anal__head {
+    padding: 0.65rem 0.75rem 0.5rem;
+  }
+  .mfy-anal__body {
+    padding: 0.5rem 0.6rem 0.7rem;
+  }
+  .mfy-anal__tabs button {
+    font-size: 0.72rem;
+    padding: 0.45rem 0.3rem;
+  }
+
+  .mfy-stats-bar {
+    bottom: calc(4px + env(safe-area-inset-bottom, 0px));
+  }
+  /* Eng kichik ekranda nom+maydon + 4 ta asosiy kartochka sig‘sin */
+  .mfy-stats-bar__card span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 9ch;
   }
   .mfy-overview {
-    top: 58px;
-    right: 10px;
-    width: 140px;
-    height: 110px;
+    display: none;
   }
-  .mfy-legend { display: none; }
-  .mfy-stats-bar {
+
+  .map-page--immersive:has(.mfy-anal) .map-controls {
+    top: auto;
+    bottom: calc(64px + min(44vh, 360px) + 12px);
+    right: 8px;
+  }
+}
+
+@media (max-width: 420px) {
+  .mfy-stats-bar__card--wide b {
+    font-size: 0.7rem;
+  }
+  .mfy-anal__summary--compact .mfy-anal__sum-lab {
+    font-size: 0.7rem;
+  }
+}
+
+/* Landscape phone: panel yon tomonga */
+@media (max-height: 480px) and (orientation: landscape) {
+  .mfy-anal {
+    top: 8px;
     bottom: 8px;
-    width: calc(100vw - 16px);
+    left: 8px;
+    right: auto;
+    width: min(280px, 46vw);
+    max-height: none;
+    height: auto;
+  }
+  .mfy-stats-bar {
+    left: calc(8px + min(280px, 46vw) + 8px);
+    right: 8px;
+    width: auto;
+    bottom: 8px;
+  }
+  .mfy-overview {
+    display: none;
+  }
+  .map-page--immersive:has(.mfy-anal) .map-toolbar-wrap {
+    left: calc(8px + min(280px, 46vw) + 8px);
+    right: 8px;
+    top: 8px;
+    bottom: auto;
   }
 }
