@@ -10966,6 +10966,14 @@ button.linkish {
   overflow: auto;
   padding: 0.65rem 0.75rem 0.9rem;
   flex: 1;
+  min-height: 0;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.mfy-anal__body::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
 }
 .mfy-anal__summary {
   list-style: none;
