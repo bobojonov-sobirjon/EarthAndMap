@@ -334,6 +334,8 @@
   "lands.exportEmpty": "Eksport uchun qator tanlanmagan",
   "lands.exportSelectHint": "Avval jadvaldan qatorlarni belgilang",
   "lands.selectAll": "Barchasini tanlash",
+  "lands.selectAllYears": "Barcha yillar",
+  "lands.shownCount": "Ko‘rsatilmoqda: {n} ta obyekt",
   "lands.searchPh": "ID, nomi, mahalla...",
   "lands.allCats": "Barcha kategoriyalar",
   "lands.col.name": "Obyekt nomi",

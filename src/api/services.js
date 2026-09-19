@@ -18,6 +18,27 @@ export { fetchMapSnapshot, fetchMapBoundaries, fetchMapFeatures, fetchMapConfig 
 
 export const landsApi = {
   list: (params) => client.get('/lands/', { params }),
+  /** Barcha sahifalarni yig‘ib to‘liq ro‘yxat qaytaradi (50+ limitni yechadi). */
+  listAll: async (params = {}) => {
+    const pageSize = params.page_size || 2000
+    const base = { ...params, page_size: pageSize }
+    delete base.page
+    const first = await client.get('/lands/', { params: { ...base, page: 1 } })
+    const data = first.data
+    let results = data.results || (Array.isArray(data) ? data : [])
+    if (!data.next) return results
+    let page = 2
+    let next = data.next
+    while (next) {
+      const res = await client.get('/lands/', { params: { ...base, page } })
+      const chunk = res.data.results || []
+      results = results.concat(chunk)
+      next = res.data.next
+      page += 1
+      if (page > 200) break
+    }
+    return results
+  },
   get: (id) => client.get(`/lands/${id}/`),
   create: (data) => client.post('/lands/', data),
   update: (id, data) => client.put(`/lands/${id}/`, data),

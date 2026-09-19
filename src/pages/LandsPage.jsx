@@ -34,7 +34,7 @@ export default function LandsPage() {
   const [categoryFilter, setCategoryFilter] = useState('')
   const [mahallaFilter, setMahallaFilter] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
-  const [yearFilter, setYearFilter] = useState('')
+  const [yearFilters, setYearFilters] = useState([]) // tanlangan yillar (multi)
   const [selected, setSelected] = useState(null)
   const [selectedVersions, setSelectedVersions] = useState(null)
   const [selectedIds, setSelectedIds] = useState(() => new Set())
@@ -44,21 +44,21 @@ export default function LandsPage() {
   const defaultYear = dbYears[0] ?? CURRENT_YEAR
 
   const load = async (opts = {}) => {
-    const year = opts.year !== undefined ? opts.year : yearFilter
+    const years = opts.years !== undefined ? opts.years : yearFilters
     setLoading(true)
     try {
-      const params = {}
+      const params = { page_size: 2000 }
       if (search) params.search = search
       if (categoryFilter) params.category = categoryFilter
       if (statusFilter) params.status = statusFilter
-      if (year) params.monitoring_year = year
+      if (years?.length === 1) params.monitoring_year = years[0]
+      else if (years?.length > 1) params.monitoring_years = years.join(',')
       if (mahallaFilter) params.search = [search, mahallaFilter].filter(Boolean).join(' ')
-      const [landsRes, catsRes] = await Promise.all([
-        landsApi.list(params),
+      const [all, catsRes] = await Promise.all([
+        landsApi.listAll(params),
         categoriesApi.list(),
       ])
-      const all = landsRes.data.results || landsRes.data
-      setLands(all.filter((l) => isResearchCategory(l.category_code)))
+      setLands((all || []).filter((l) => isResearchCategory(l.category_code)))
       setSelectedIds(new Set())
       setCategories(catsRes.data.results || catsRes.data)
     } finally {
@@ -81,9 +81,9 @@ export default function LandsPage() {
       }
       if (!alive) return
       setDbYears(years)
-      const initial = years[0] ? String(years[0]) : String(CURRENT_YEAR)
-      setYearFilter(initial)
-      await load({ year: initial })
+      const initial = years[0] ? [years[0]] : [CURRENT_YEAR]
+      setYearFilters(initial)
+      await load({ years: initial })
     })()
     return () => { alive = false }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -131,10 +131,37 @@ export default function LandsPage() {
     setCategoryFilter('')
     setMahallaFilter('')
     setStatusFilter('')
-    const y = defaultYear ? String(defaultYear) : ''
-    setYearFilter(y)
-    setTimeout(() => load({ year: y }), 0)
+    const ys = defaultYear ? [defaultYear] : []
+    setYearFilters(ys)
+    setTimeout(() => load({ years: ys }), 0)
   }
+
+  const yearOptions = useMemo(() => {
+    const fromDb = dbYears.length ? dbYears : [CURRENT_YEAR]
+    // Istirohat multi-export uchun odatiy yillar ham ko‘rinsin
+    const extras = [2018, 2020, 2022, 2024, 2026]
+    return [...new Set([...fromDb, ...extras])].sort((a, b) => b - a)
+  }, [dbYears])
+
+  const toggleYear = (y) => {
+    const n = Number(y)
+    setYearFilters((prev) => {
+      const has = prev.includes(n)
+      if (has) {
+        if (prev.length === 1) return prev // kamida bitta yil
+        return prev.filter((x) => x !== n)
+      }
+      return [...prev, n].sort((a, b) => b - a)
+    })
+  }
+
+  const selectAllYears = () => {
+    setYearFilters([...yearOptions])
+  }
+
+  const yearFilterLabel = yearFilters.length
+    ? yearFilters.join(', ')
+    : t('common.all')
 
   const allSelected = lands.length > 0 && lands.every((l) => selectedIds.has(l.id))
   const someSelected = lands.some((l) => selectedIds.has(l.id))
@@ -161,13 +188,14 @@ export default function LandsPage() {
     loc(l, 'name', lang) || l.name || '',
     catName(l.category_code || l, t, lang) || displayCategoryName(l.category_code || l),
     l.mahalla || '',
+    l.monitoring_year ?? '',
     l.area_ha ?? '',
     l.length_km ?? '',
     t(`status.${l.status}`) || STATUS_LABELS[l.status] || l.status,
     l.updated_at ? new Date(l.updated_at).toLocaleDateString('uz') : '',
   ]
 
-  const exportHeader = ['ID', 'Nomi', 'Turi', 'MFY', 'Maydon_ga', 'Uzunlik_km', 'Holati', 'Yangilangan']
+  const exportHeader = ['ID', 'Nomi', 'Turi', 'MFY', 'Yil', 'Maydon_ga', 'Uzunlik_km', 'Holati', 'Yangilangan']
 
   const downloadBlob = (blob, filename) => {
     const url = URL.createObjectURL(blob)
@@ -190,11 +218,13 @@ export default function LandsPage() {
         r[5],
         r[6],
         r[7],
+        r[8],
       ]
     })
     const csv = [exportHeader.join(','), ...rows.map((r) => r.join(','))].join('\n')
     const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' })
-    downloadBlob(blob, `reyestr_${new Date().toISOString().slice(0, 10)}.csv`)
+    const yearsTag = yearFilters.length ? `_${yearFilters.join('-')}` : ''
+    downloadBlob(blob, `reyestr${yearsTag}_${new Date().toISOString().slice(0, 10)}.csv`)
   }
 
   const exportExcel = (items) => {
@@ -210,6 +240,7 @@ export default function LandsPage() {
     const rowXml = (cells) => (
       `<Row>${cells.map((c) => `<Cell><Data ss:Type="String">${escapeXml(c)}</Data></Cell>`).join('')}</Row>`
     )
+    const yearsTag = yearFilters.length ? `_${yearFilters.join('-')}` : ''
     const xml = `<?xml version="1.0"?>
 <?mso-application progid="Excel.Sheet"?>
 <Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"
@@ -219,7 +250,7 @@ ${rowXml(exportHeader)}
 ${items.map((l) => rowXml(landToRow(l))).join('\n')}
 </Table></Worksheet></Workbook>`
     const blob = new Blob([xml], { type: 'application/vnd.ms-excel;charset=utf-8;' })
-    downloadBlob(blob, `reyestr_${new Date().toISOString().slice(0, 10)}.xls`)
+    downloadBlob(blob, `reyestr${yearsTag}_${new Date().toISOString().slice(0, 10)}.xls`)
   }
 
   const exportSelectedExcel = () => {
@@ -318,19 +349,26 @@ ${items.map((l) => rowXml(landToRow(l))).join('\n')}
           onChange={(e) => setSearch(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && load()}
         />
-        <select
-          value={yearFilter}
-          onChange={(e) => {
-            const y = e.target.value
-            setYearFilter(y)
-            setTimeout(() => load({ year: y }), 0)
-          }}
-        >
-          <option value="">{t('common.all')} — {t('map.year')}</option>
-          {(dbYears.length ? dbYears : [CURRENT_YEAR]).map((y) => (
-            <option key={y} value={y}>{y}</option>
-          ))}
-        </select>
+        <div className="lands-year-multi" title={yearFilterLabel}>
+          <div className="lands-year-multi__head">
+            <span>{t('map.year')}: {yearFilters.length ? yearFilters.join(', ') : '—'}</span>
+            <button type="button" className="btn btn-sm btn-ghost" onClick={selectAllYears}>
+              {t('lands.selectAllYears')}
+            </button>
+          </div>
+          <div className="lands-year-multi__list" role="group" aria-label={t('map.year')}>
+            {yearOptions.map((y) => (
+              <label key={y} className="lands-year-multi__item">
+                <input
+                  type="checkbox"
+                  checked={yearFilters.includes(y)}
+                  onChange={() => toggleYear(y)}
+                />
+                <span>{y}</span>
+              </label>
+            ))}
+          </div>
+        </div>
         <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)}>
           <option value="">{t('lands.allCats')}</option>
           {researchCats.map((c) => (
@@ -347,7 +385,7 @@ ${items.map((l) => rowXml(landToRow(l))).join('\n')}
             <option key={k} value={k}>{t(`status.${k}`)}</option>
           ))}
         </select>
-        <button type="button" className="btn btn-primary" onClick={load}>{t('common.search')}</button>
+        <button type="button" className="btn btn-primary" onClick={() => load()}>{t('common.search')}</button>
       </div>
 
       <div className="lands-summary">
@@ -359,7 +397,7 @@ ${items.map((l) => rowXml(landToRow(l))).join('\n')}
             style={{ borderTopColor: s.color }}
             title={`${t(`layer.${s.key}`)} — xaritada ochish`}
             onClick={() => {
-              const y = yearFilter || defaultYear
+              const y = yearFilters[0] || defaultYear
               const cat = s.codes?.[0] || s.key
               navigate(`/map?category=${encodeURIComponent(cat)}&year=${y}`)
             }}
@@ -370,6 +408,11 @@ ${items.map((l) => rowXml(landToRow(l))).join('\n')}
           </button>
         ))}
       </div>
+
+      <p className="lands-count muted">
+        {t('lands.shownCount').replace('{n}', String(lands.length))}
+        {yearFilters.length ? ` · ${yearFilters.join(', ')}` : ''}
+      </p>
 
       <div className={`lands-layout ${selected ? 'with-detail' : ''}`}>
         <div className="table-wrap">
@@ -391,6 +434,7 @@ ${items.map((l) => rowXml(landToRow(l))).join('\n')}
                 <th>{t('lands.col.name')}</th>
                 <th>{t('lands.col.type')}</th>
                 <th>{t('map.mfy')}</th>
+                <th>{t('map.year')}</th>
                 <th>{t('lands.col.area')}</th>
                 <th>{t('lands.col.len')}</th>
                 <th>{t('lands.col.status')}</th>
@@ -416,13 +460,14 @@ ${items.map((l) => rowXml(landToRow(l))).join('\n')}
                   </td>
                   <td>{catName(land.category_code || land, t, lang)}</td>
                   <td>{land.mahalla || '—'}</td>
+                  <td>{land.monitoring_year ?? '—'}</td>
                   <td>{land.area_ha ?? '—'}</td>
                   <td>{land.length_km ?? '—'}</td>
                   <td><span className={`badge badge-${land.status}`}>{t(`status.${land.status}`)}</span></td>
                   <td>{land.updated_at ? new Date(land.updated_at).toLocaleDateString('uz') : '—'}</td>
                   <td className="actions-cell">
                     <button type="button" className="btn btn-sm btn-secondary" title="Batafsil" onClick={() => openDetail(land)}>📄</button>
-                    <button type="button" className="btn btn-sm btn-secondary" title="Xaritada ko'rsatish" onClick={() => navigate(`/map?land=${land.id}&year=${land.monitoring_year || yearFilter || defaultYear}`)}>🗺️</button>
+                    <button type="button" className="btn btn-sm btn-secondary" title="Xaritada ko'rsatish" onClick={() => navigate(`/map?land=${land.id}&year=${land.monitoring_year || yearFilters[0] || defaultYear}`)}>🗺️</button>
                     <button type="button" className="btn btn-sm btn-secondary" title="PDF kartochka" onClick={() => exportPdfCard(land)}>⬇️</button>
                     <button type="button" className="btn btn-sm btn-ghost" title="Versiyalar" onClick={() => showVersions(land)}>⏱</button>
                     {canEdit && (
@@ -453,7 +498,7 @@ ${items.map((l) => rowXml(landToRow(l))).join('\n')}
               {selected.description && <div className="full"><span>Tavsif</span><p>{selected.description}</p></div>}
             </div>
             <div className="lands-detail-actions">
-              <button type="button" className="btn btn-primary" onClick={() => navigate(`/map?land=${selected.id}&year=${selected.monitoring_year || yearFilter || defaultYear}`)}>
+              <button type="button" className="btn btn-primary" onClick={() => navigate(`/map?land=${selected.id}&year=${selected.monitoring_year || yearFilters[0] || defaultYear}`)}>
                 Xaritada ochish
               </button>
               <button type="button" className="btn btn-secondary" onClick={() => exportPdfCard(selected)}>

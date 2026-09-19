@@ -335,6 +335,8 @@
   "lands.exportEmpty": "No rows to export",
   "lands.exportSelectHint": "Select rows in the table first",
   "lands.selectAll": "Select all",
+  "lands.selectAllYears": "All years",
+  "lands.shownCount": "Showing: {n} objects",
   "lands.searchPh": "ID, name, neighbourhood...",
   "lands.allCats": "All categories",
   "lands.col.name": "Name",

@@ -6021,9 +6021,58 @@ body {
 .lands-header { align-items: flex-start; }
 
 .lands-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  align-items: flex-end;
+  margin-bottom: 1rem;
+}
 
-  display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 1rem;
+.lands-year-multi {
+  min-width: min(100%, 280px);
+  flex: 1 1 260px;
+  background: var(--surface2, #16202e);
+  border: 1px solid var(--border, rgba(148,163,184,0.25));
+  border-radius: 10px;
+  padding: 0.45rem 0.55rem 0.55rem;
+}
 
+.lands-year-multi__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.78rem;
+  color: #93a4bb;
+  margin-bottom: 0.35rem;
+}
+
+.lands-year-multi__list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.65rem;
+}
+
+.lands-year-multi__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.85rem;
+  color: #e2e8f0;
+  cursor: pointer;
+  user-select: none;
+}
+
+.lands-year-multi__item input {
+  width: 0.95rem;
+  height: 0.95rem;
+  accent-color: #2d8cf0;
+  cursor: pointer;
+}
+
+.lands-count {
+  margin: 0 0 0.75rem;
+  font-size: 0.85rem;
 }
 
 .lands-filters input, .lands-filters select {

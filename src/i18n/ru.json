@@ -335,6 +335,8 @@
   "lands.exportEmpty": "Нет строк для экспорта",
   "lands.exportSelectHint": "Сначала отметьте строки в таблице",
   "lands.selectAll": "Выбрать все",
+  "lands.selectAllYears": "Все годы",
+  "lands.shownCount": "Показано: {n} объектов",
   "lands.searchPh": "ID, название, махалля...",
   "lands.allCats": "Все категории",
   "lands.col.name": "Название",
